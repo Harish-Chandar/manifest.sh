@@ -1,0 +1,53 @@
+# ~/.bash_prompt
+
+RAW_GREEN="\e[32m"
+RAW_YELLOW="\e[33m"
+RAW_PURPLE="\e[35m"
+RAW_BLUE_BG="\e[37;44m"
+RAW_RESET="\e[0m"
+
+# Define wrapped codes for use OUTSIDE functions in PS1
+GREEN="\[\e[32m\]"
+YELLOW="\[\e[33m\]"
+RESET="\[\e[0m\]"
+
+get_git_branch() {
+    if [[ "$PWD" == "/mnt/"* ]]; then
+        return
+    fi
+
+    local branch
+    branch=$(git symbolic-ref --short HEAD 2>/dev/null || git rev-parse --short HEAD 2>/dev/null)
+    
+    if [[ -n "$branch" ]]; then
+        local status_suffix=""
+        if [[ -n $(git status --porcelain 2>/dev/null) ]]; then
+            # Use raw purple then back to raw yellow
+            status_suffix="${RAW_PURPLE}*${RAW_YELLOW}"
+        fi
+        echo -e "${RAW_YELLOW}[$branch] $status_suffix ${RAW_RESET}"
+    fi
+}
+
+parse_path() {
+    local p
+    if [[ "$PWD" == "$HOME" ]]; then
+        p="${RAW_GREEN}~"
+    elif [[ "$PWD" == "$HOME/"* ]]; then
+        p="${RAW_GREEN}~/${PWD#$HOME/}"
+    elif [[ "$PWD" == "/mnt/c" ]]; then
+        p="${RAW_BLUE_BG}/mnt/c${RAW_RESET}"
+    elif [[ "$PWD" == "/mnt/c/"* ]]; then
+        # Blue block for root, then Green for the rest
+        p="${RAW_BLUE_BG}/mnt/c/${RAW_RESET}${RAW_GREEN}${PWD#/mnt/c/}"
+    elif [[ "$PWD" == "/" ]]; then
+        p="${RAW_GREEN}/"
+    else
+        p="${RAW_GREEN}$PWD"
+    fi
+    echo -e "$p"
+}
+
+# Use the functions without a leading color, as they provide their own
+export PS1="\$(get_git_branch)\$(parse_path)${RESET}$ "
+
