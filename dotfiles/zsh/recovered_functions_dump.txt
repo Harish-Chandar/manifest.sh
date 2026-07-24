@@ -1,0 +1,7411 @@
+_SUSEconfig () {
+	# undefined
+	builtin autoload -XUz
+}
+__arguments () {
+	# undefined
+	builtin autoload -XUz
+}
+__fsel () {
+	local cmd="${FZF_CTRL_T_COMMAND:-"command find -L . -mindepth 1 \\( -path '*/.*' -o -fstype 'sysfs' -o -fstype 'devfs' -o -fstype 'devtmpfs' -o -fstype 'proc' \\) -prune     -o -type f -print     -o -type d -print     -o -type l -print 2> /dev/null | cut -b3-"}" 
+	setopt localoptions pipefail no_aliases 2> /dev/null
+	local item
+	eval "$cmd" | FZF_DEFAULT_OPTS="--height ${FZF_TMUX_HEIGHT:-40%} --reverse --scheme=path --bind=ctrl-z:ignore ${FZF_DEFAULT_OPTS-} ${FZF_CTRL_T_OPTS-}" $(__fzfcmd) -m "$@" | while read item
+	do
+		echo -n "${(q)item} "
+	done
+	local ret=$? 
+	echo
+	return $ret
+}
+__fzf_comprun () {
+	if [[ "$(type _fzf_comprun 2>&1)" =~ function ]]
+	then
+		_fzf_comprun "$@"
+	elif [ -n "${TMUX_PANE-}" ] && {
+			[ "${FZF_TMUX:-0}" != 0 ] || [ -n "${FZF_TMUX_OPTS-}" ]
+		}
+	then
+		shift
+		if [ -n "${FZF_TMUX_OPTS-}" ]
+		then
+			fzf-tmux ${(Q)${(Z+n+)FZF_TMUX_OPTS}} -- "$@"
+		else
+			fzf-tmux -d ${FZF_TMUX_HEIGHT:-40%} -- "$@"
+		fi
+	else
+		shift
+		fzf "$@"
+	fi
+}
+__fzf_extract_command () {
+	local token tokens
+	tokens=(${(z)1}) 
+	for token in $tokens
+	do
+		token=${(Q)token} 
+		if [[ "$token" =~ [[:alnum:]] && ! "$token" =~ "=" ]]
+		then
+			echo "$token"
+			return
+		fi
+	done
+	echo "${tokens[1]}"
+}
+__fzf_generic_path_completion () {
+	local base lbuf cmd compgen fzf_opts suffix tail dir leftover matches
+	base=$1 
+	lbuf=$2 
+	cmd=$(__fzf_extract_command "$lbuf") 
+	compgen=$3 
+	fzf_opts=$4 
+	suffix=$5 
+	tail=$6 
+	setopt localoptions nonomatch
+	if [[ $base = *'$('* ]] || [[ $base = *'<('* ]] || [[ $base = *'>('* ]] || [[ $base = *':='* ]] || [[ $base = *'`'* ]]
+	then
+		return
+	fi
+	eval "base=$base" 2> /dev/null || return
+	[[ $base = *"/"* ]] && dir="$base" 
+	while [ 1 ]
+	do
+		if [[ -z "$dir" || -d ${dir} ]]
+		then
+			leftover=${base/#"$dir"} 
+			leftover=${leftover/#\/} 
+			[ -z "$dir" ] && dir='.' 
+			[ "$dir" != "/" ] && dir="${dir/%\//}" 
+			matches=$(eval "$compgen $(printf %q "$dir")" | FZF_DEFAULT_OPTS="--height ${FZF_TMUX_HEIGHT:-40%} --reverse --scheme=path --bind=ctrl-z:ignore ${FZF_DEFAULT_OPTS-} ${FZF_COMPLETION_OPTS-}" __fzf_comprun "$cmd" ${(Q)${(Z+n+)fzf_opts}} -q "$leftover" | while read item; do
+        item="${item%$suffix}$suffix"
+        echo -n "${(q)item} "
+      done) 
+			matches=${matches% } 
+			if [ -n "$matches" ]
+			then
+				LBUFFER="$lbuf$matches$tail" 
+			fi
+			zle reset-prompt
+			break
+		fi
+		dir=$(dirname "$dir") 
+		dir=${dir%/}/ 
+	done
+}
+__fzf_list_hosts () {
+	setopt localoptions nonomatch
+	command cat <(command tail -n +1 ~/.ssh/config ~/.ssh/config.d/* /etc/ssh/ssh_config 2> /dev/null | command grep -i '^\s*host\(name\)\? ' | awk '{for (i = 2; i <= NF; i++) print $1 " " $i}' | command grep -v '[*?%]') <(command grep -oE '^[[a-z0-9.,:-]+' ~/.ssh/known_hosts 2> /dev/null | tr ',' '\n' | tr -d '[' | awk '{ print $1 " " $1 }') <(command grep -v '^\s*\(#\|$\)' /etc/hosts 2> /dev/null | command grep -Fv '0.0.0.0' | command sed 's/#.*//') | awk '{for (i = 2; i <= NF; i++) print $i}' | sort -u
+}
+__fzfcmd () {
+	[ -n "${TMUX_PANE-}" ] && {
+		[ "${FZF_TMUX:-0}" != 0 ] || [ -n "${FZF_TMUX_OPTS-}" ]
+	} && echo "fzf-tmux ${FZF_TMUX_OPTS:--d${FZF_TMUX_HEIGHT:-40%}} -- " || echo "fzf"
+}
+__starship_get_time () {
+	(( STARSHIP_CAPTURED_TIME = int(rint(EPOCHREALTIME * 1000)) ))
+}
+__zoxide_cd () {
+	\builtin cd -- "$@"
+}
+__zoxide_hook () {
+	\command zoxide add -- "$(__zoxide_pwd)"
+}
+__zoxide_pwd () {
+	\builtin pwd -L
+}
+__zoxide_z () {
+	if [[ "$#" -eq 0 ]]
+	then
+		__zoxide_cd ~
+	elif [[ "$#" -eq 1 ]] && {
+			[[ -d "$1" ]] || [[ "$1" = '-' ]] || [[ "$1" =~ ^[-+][0-9]$ ]]
+		}
+	then
+		__zoxide_cd "$1"
+	elif [[ "$@[-1]" == "${__zoxide_z_prefix}"?* ]]
+	then
+		\builtin local result="${@[-1]}"
+		__zoxide_cd "${result:${#__zoxide_z_prefix}}"
+	else
+		\builtin local result
+		result="$(\command zoxide query --exclude "$(__zoxide_pwd)" -- "$@")"  && __zoxide_cd "${result}"
+	fi
+}
+__zoxide_z_complete () {
+	[[ "${#words[@]}" -eq "${CURRENT}" ]] || return 0
+	if [[ "${#words[@]}" -eq 2 ]]
+	then
+		_files -/
+	elif [[ "${words[-1]}" == '' ]] && [[ "${words[-2]}" != "${__zoxide_z_prefix}"?* ]]
+	then
+		\builtin local result
+		if result="$(\command zoxide query --exclude "$(__zoxide_pwd)" --interactive -- ${words[2,-1]})" 
+		then
+			result="${__zoxide_z_prefix}${result}" 
+			compadd -Q "${(q-)result}"
+		fi
+		\builtin printf '\e[5n'
+	fi
+	return 0
+}
+__zoxide_zi () {
+	\builtin local result
+	result="$(\command zoxide query --interactive -- "$@")"  && __zoxide_cd "${result}"
+}
+_a2ps () {
+	# undefined
+	builtin autoload -XUz
+}
+_a2utils () {
+	# undefined
+	builtin autoload -XUz
+}
+_aap () {
+	# undefined
+	builtin autoload -XUz
+}
+_abcde () {
+	# undefined
+	builtin autoload -XUz
+}
+_absolute_command_paths () {
+	# undefined
+	builtin autoload -XUz
+}
+_ack () {
+	# undefined
+	builtin autoload -XUz
+}
+_acpi () {
+	# undefined
+	builtin autoload -XUz
+}
+_acpitool () {
+	# undefined
+	builtin autoload -XUz
+}
+_acroread () {
+	# undefined
+	builtin autoload -XUz
+}
+_adb () {
+	# undefined
+	builtin autoload -XUz
+}
+_add-zle-hook-widget () {
+	# undefined
+	builtin autoload -XUz
+}
+_add-zsh-hook () {
+	# undefined
+	builtin autoload -XUz
+}
+_alias () {
+	# undefined
+	builtin autoload -XUz
+}
+_aliases () {
+	# undefined
+	builtin autoload -XUz
+}
+_all_labels () {
+	local __gopt __len __tmp __pre __suf __ret=1 __descr __spec __prev 
+	if [[ "$1" = - ]]
+	then
+		__prev=- 
+		shift
+	fi
+	__gopt=() 
+	zparseopts -D -a __gopt 1 2 V J x
+	__tmp=${argv[(ib:4:)-]} 
+	__len=$# 
+	if [[ __tmp -lt __len ]]
+	then
+		__pre=$(( __tmp-1 )) 
+		__suf=$__tmp 
+	elif [[ __tmp -eq $# ]]
+	then
+		__pre=-2 
+		__suf=$(( __len+1 )) 
+	else
+		__pre=4 
+		__suf=5 
+	fi
+	while comptags "-A$__prev" "$1" curtag __spec
+	do
+		(( $#funcstack > _tags_level )) && _comp_tags="${_comp_tags% * }" 
+		_tags_level=$#funcstack 
+		_comp_tags="$_comp_tags $__spec " 
+		if [[ "$curtag" = *[^\\]:* ]]
+		then
+			zformat -f __descr "${curtag#*:}" "d:$3"
+			_description "$__gopt[@]" "${curtag%:*}" "$2" "$__descr"
+			curtag="${curtag%:*}" 
+			"$4" "${(P@)2}" "${(@)argv[5,-1]}" && __ret=0 
+		else
+			_description "$__gopt[@]" "$curtag" "$2" "$3"
+			"${(@)argv[4,__pre]}" "${(P@)2}" "${(@)argv[__suf,-1]}" && __ret=0 
+		fi
+	done
+	return __ret
+}
+_all_matches () {
+	# undefined
+	builtin autoload -XUz
+}
+_alsa-utils () {
+	# undefined
+	builtin autoload -XUz
+}
+_alternative () {
+	local tags def expl descr action mesgs nm="$compstate[nmatches]" subopts 
+	local opt ws curcontext="$curcontext" 
+	subopts=() 
+	while getopts 'O:C:' opt
+	do
+		case "$opt" in
+			(O) subopts=("${(@P)OPTARG}")  ;;
+			(C) curcontext="${curcontext%:*}:$OPTARG"  ;;
+		esac
+	done
+	shift OPTIND-1
+	[[ "$1" = -(|-) ]] && shift
+	mesgs=() 
+	_tags "${(@)argv%%:*}"
+	while _tags
+	do
+		for def
+		do
+			if _requested "${def%%:*}"
+			then
+				descr="${${def#*:}%%:*}" 
+				action="${def#*:*:}" 
+				_description "${def%%:*}" expl "$descr"
+				if [[ "$action" = \ # ]]
+				then
+					mesgs=("$mesgs[@]" "${def%%:*}:$descr") 
+				elif [[ "$action" = \(\(*\)\) ]]
+				then
+					eval ws\=\( "${action[3,-3]}" \)
+					_describe -t "${def%%:*}" "$descr" ws -M 'r:|[_-]=* r:|=*' "$subopts[@]"
+				elif [[ "$action" = \(*\) ]]
+				then
+					eval ws\=\( "${action[2,-2]}" \)
+					_all_labels "${def%%:*}" expl "$descr" compadd "$subopts[@]" -a - ws
+				elif [[ "$action" = \{*\} ]]
+				then
+					while _next_label "${def%%:*}" expl "$descr"
+					do
+						eval "$action[2,-2]"
+					done
+				elif [[ "$action" = \ * ]]
+				then
+					eval "action=( $action )"
+					while _next_label "${def%%:*}" expl "$descr"
+					do
+						"$action[@]"
+					done
+				else
+					eval "action=( $action )"
+					while _next_label "${def%%:*}" expl "$descr"
+					do
+						"$action[1]" "$subopts[@]" "$expl[@]" "${(@)action[2,-1]}"
+					done
+				fi
+			fi
+		done
+		[[ nm -ne compstate[nmatches] ]] && return 0
+	done
+	for descr in "$mesgs[@]"
+	do
+		_message -e "${descr%%:*}" "${descr#*:}"
+	done
+	return 1
+}
+_analyseplugin () {
+	# undefined
+	builtin autoload -XUz
+}
+_ansible () {
+	# undefined
+	builtin autoload -XUz
+}
+_ant () {
+	# undefined
+	builtin autoload -XUz
+}
+_antiword () {
+	# undefined
+	builtin autoload -XUz
+}
+_apachectl () {
+	# undefined
+	builtin autoload -XUz
+}
+_apm () {
+	# undefined
+	builtin autoload -XUz
+}
+_approximate () {
+	# undefined
+	builtin autoload -XUz
+}
+_apt () {
+	# undefined
+	builtin autoload -XUz
+}
+_apt-file () {
+	# undefined
+	builtin autoload -XUz
+}
+_apt-move () {
+	# undefined
+	builtin autoload -XUz
+}
+_apt-show-versions () {
+	# undefined
+	builtin autoload -XUz
+}
+_aptitude () {
+	# undefined
+	builtin autoload -XUz
+}
+_arch_archives () {
+	# undefined
+	builtin autoload -XUz
+}
+_arch_namespace () {
+	# undefined
+	builtin autoload -XUz
+}
+_arg_compile () {
+	# undefined
+	builtin autoload -XUz
+}
+_arguments () {
+	local long cmd="$words[1]" descr odescr mesg subopts opt opt2 usecc autod 
+	local oldcontext="$curcontext" hasopts rawret optarg singopt alwopt 
+	local setnormarg start rest
+	local -a match mbegin mend
+	integer opt_args_use_NUL_separators=0 
+	subopts=() 
+	singopt=() 
+	while [[ "$1" = -([AMO]*|[0CRSWnsw]) ]]
+	do
+		case "$1" in
+			(-0) opt_args_use_NUL_separators=1 
+				shift ;;
+			(-C) usecc=yes 
+				shift ;;
+			(-O) subopts=("${(@P)2}") 
+				shift 2 ;;
+			(-O*) subopts=("${(@P)${1[3,-1]}}") 
+				shift ;;
+			(-R) rawret=yes 
+				shift ;;
+			(-n) setnormarg=yes 
+				NORMARG=-1 
+				shift ;;
+			(-w) optarg=yes 
+				shift ;;
+			(-W) alwopt=arg 
+				shift ;;
+			(-[Ss]) singopt+=($1) 
+				shift ;;
+			(-[AM]) singopt+=($1 $2) 
+				shift 2 ;;
+			(-[AM]*) singopt+=($1) 
+				shift ;;
+		esac
+	done
+	[[ $1 = ':' ]] && shift
+	singopt+=(':') 
+	[[ "$PREFIX" = [-+] ]] && alwopt=arg 
+	long=$argv[(I)--] 
+	if (( long ))
+	then
+		local name tmp tmpargv
+		tmpargv=("${(@)argv[1,long-1]}") 
+		name=${~words[1]}  2> /dev/null
+		[[ "$name" = [^/]*/* ]] && name="$PWD/$name" 
+		name="_args_cache_${name}" 
+		name="${name//[^a-zA-Z0-9_]/_}" 
+		if (( ! ${(P)+name} ))
+		then
+			local iopts sopts lflag pattern tmpo dir cur cache
+			typeset -Ua lopts
+			cache=() 
+			set -- "${(@)argv[long+1,-1]}"
+			iopts=() 
+			sopts=() 
+			while [[ "$1" = -[lis]* ]]
+			do
+				if [[ "$1" = -l ]]
+				then
+					lflag='-l' 
+					shift
+					continue
+				fi
+				if [[ "$1" = -??* ]]
+				then
+					tmp="${1[3,-1]}" 
+					cur=1 
+				else
+					tmp="$2" 
+					cur=2 
+				fi
+				if [[ "$tmp[1]" = '(' ]]
+				then
+					tmp=(${=tmp[2,-2]}) 
+				else
+					tmp=("${(@P)tmp}") 
+				fi
+				if [[ "$1" = -i* ]]
+				then
+					iopts+=("$tmp[@]") 
+				else
+					sopts+=("$tmp[@]") 
+				fi
+				shift cur
+			done
+			tmp=() 
+			_call_program $lflag options ${~words[1]} --help 2>&1 | while IFS= read -r opt
+			do
+				if (( ${#tmp} ))
+				then
+					if [[ $opt = [[:space:]][[:space:]][[:space:]]*[[:alpha:]]* ]]
+					then
+						opt=${opt##[[:space:]]##} 
+						lopts+=("${^tmp[@]}":${${${opt//:/-}//\[/(}//\]/)}) 
+						tmp=() 
+						continue
+					else
+						lopts+=("${^tmp[@]}":) 
+						tmp=() 
+					fi
+				fi
+				while [[ $opt = [,[:space:]]#(#b)(-[^,[:space:]]#)(*) ]]
+				do
+					start=${match[1]} 
+					rest=${match[2]} 
+					if [[ -z ${tmp[(r)${start%%[^a-zA-Z0-9_-]#}]} ]]
+					then
+						if [[ $start = (#b)--\[(*)\](*) ]]
+						then
+							tmp+=("--${match[1]}${match[2]}" "--${match[2]}") 
+						else
+							tmp+=($start) 
+						fi
+					fi
+					opt=$rest 
+				done
+				opt=${opt## [^[:space:]]##  } 
+				opt=${opt##[[:space:]]##} 
+				if [[ -n $opt ]]
+				then
+					lopts+=("${^tmp[@]}":${${${opt//:/-}//\[/(}//\]/)}) 
+					tmp=() 
+				fi
+			done
+			if (( ${#tmp} ))
+			then
+				lopts+=("${^tmp[@]}":) 
+			fi
+			tmp=() 
+			for opt in "${(@)${(@)lopts:#--}%%[\[:=]*}"
+			do
+				let "$tmpargv[(I)(|\([^\)]#\))(|\*)${opt}(|[-+]|=(|-))(|\[*\])(|:*)]" || tmp+=("$lopts[(r)$opt(|[\[:=]*)]") 
+			done
+			lopts=("$tmp[@]") 
+			while (( $#iopts ))
+			do
+				lopts=(${lopts:#$~iopts[1](|[\[:=]*)}) 
+				shift iopts
+			done
+			while (( $#sopts ))
+			do
+				lopts+=(${lopts/$~sopts[1]/$sopts[2]}) 
+				shift 2 sopts
+			done
+			argv+=('*=FILE*:file:_files' '*=(DIR|PATH)*:directory:_files -/' '*=*:=: ' '*: :  ') 
+			while (( $# ))
+			do
+				pattern="${${${(M)1#*[^\\]:}[1,-2]}//\\\\:/:}" 
+				descr="${1#${pattern}}" 
+				if [[ "$pattern" = *\(-\) ]]
+				then
+					pattern="$pattern[1,-4]" 
+					dir=- 
+				else
+					dir= 
+				fi
+				shift
+				tmp=("${(@M)lopts:##$~pattern:*}") 
+				lopts=("${(@)lopts:##$~pattern:*}") 
+				(( $#tmp )) || continue
+				opt='' 
+				tmp=("${(@)tmp%:}") 
+				tmpo=("${(@M)tmp:#[^:]##\[\=*}") 
+				if (( $#tmpo ))
+				then
+					tmp=("${(@)tmp:#[^:]##\[\=*}") 
+					for opt in "$tmpo[@]"
+					do
+						if [[ $opt = (#b)(*):([^:]#) ]]
+						then
+							opt=$match[1] 
+							odescr="[${match[2]}]" 
+						else
+							odescr= 
+						fi
+						if [[ $opt = (#b)(*)\[\=* ]]
+						then
+							opt2=${${match[1]}//[^a-zA-Z0-9_-]}=-${dir}${odescr} 
+						else
+							opt2=${${opt}//[^a-zA-Z0-9_-]}=${dir}${odescr} 
+						fi
+						if [[ "$descr" = :\=* ]]
+						then
+							cache+=("${opt2}::${(L)${opt%\]}#*\=}: ") 
+						elif [[ "$descr" = ::* ]]
+						then
+							cache+=("${opt2}${descr}") 
+						else
+							cache+=("${opt2}:${descr}") 
+						fi
+					done
+				fi
+				tmpo=("${(@M)tmp:#[^:]##\=*}") 
+				if (( $#tmpo ))
+				then
+					tmp=("${(@)tmp:#[^:]##\=*}") 
+					for opt in "$tmpo[@]"
+					do
+						if [[ $opt = (#b)(*):([^:]#) ]]
+						then
+							opt=$match[1] 
+							odescr="[${match[2]}]" 
+						else
+							odescr= 
+						fi
+						opt2="${${opt%%\=*}//[^a-zA-Z0-9_-]}=${dir}${odescr}" 
+						if [[ "$descr" = :\=* ]]
+						then
+							cache+=("${opt2}:${(L)${opt%\]}#*\=}: ") 
+						else
+							cache+=("${opt2}${descr}") 
+						fi
+					done
+				fi
+				if (( $#tmp ))
+				then
+					tmp=("${(@)^${(@)tmp:#^*:*}//:/[}]" "${(@)${(@)tmp:#*:*}//[^a-zA-Z0-9_-]}") 
+					if [[ -n "$descr" && "$descr" != ': :  ' ]]
+					then
+						cache+=("${(@)^tmp}${descr}") 
+					else
+						cache+=("$tmp[@]") 
+					fi
+				fi
+			done
+			set -A "$name" "${(@)cache:# #}"
+		fi
+		set -- "$tmpargv[@]" "${(@P)name}"
+	fi
+	zstyle -s ":completion:${curcontext}:options" auto-description autod
+	if (( $# )) && comparguments -i "$autod" "$singopt[@]" "$@"
+	then
+		local action noargs aret expl local tried ret=1 
+		local next direct odirect equal single matcher matched ws tmp1 tmp2 tmp3
+		local opts subc tc prefix suffix descrs actions subcs anum
+		local origpre="$PREFIX" origipre="$IPREFIX" nm="$compstate[nmatches]" 
+		if comparguments -D descrs actions subcs
+		then
+			if comparguments -O next direct odirect equal
+			then
+				opts=yes 
+				_tags "$subcs[@]" options
+			else
+				_tags "$subcs[@]"
+			fi
+		else
+			if comparguments -a
+			then
+				noargs='no more arguments' 
+			else
+				noargs='no arguments' 
+			fi
+			if comparguments -O next direct odirect equal
+			then
+				opts=yes 
+				_tags options
+			elif [[ $? -eq 2 ]]
+			then
+				compadd -Q - "${PREFIX}${SUFFIX}"
+				return 0
+			else
+				_message "$noargs"
+				return 1
+			fi
+		fi
+		comparguments -M matcher
+		context=() 
+		state=() 
+		state_descr=() 
+		while true
+		do
+			while _tags
+			do
+				anum=1 
+				if [[ -z "$tried" ]]
+				then
+					while [[ anum -le $#descrs ]]
+					do
+						action="$actions[anum]" 
+						descr="$descrs[anum]" 
+						subc="$subcs[anum++]" 
+						if [[ $subc = argument* && -n $setnormarg ]]
+						then
+							comparguments -n NORMARG
+						fi
+						if [[ -n "$matched" ]] || _requested "$subc"
+						then
+							curcontext="${oldcontext%:*}:$subc" 
+							_description "$subc" expl "$descr"
+							if [[ "$action" = \=\ * ]]
+							then
+								action="$action[3,-1]" 
+								words=("$subc" "$words[@]") 
+								(( CURRENT++ ))
+							fi
+							if [[ "$action" = -\>* ]]
+							then
+								action="${${action[3,-1]##[ 	]#}%%[ 	]#}" 
+								if (( ! $state[(I)$action] ))
+								then
+									comparguments -W line opt_args $opt_args_use_NUL_separators
+									state+=("$action") 
+									state_descr+=("$descr") 
+									if [[ -n "$usecc" ]]
+									then
+										curcontext="${oldcontext%:*}:$subc" 
+									else
+										context+=("$subc") 
+									fi
+									compstate[restore]='' 
+									aret=yes 
+								fi
+							else
+								if [[ -z "$local" ]]
+								then
+									local line
+									typeset -A opt_args
+									local=yes 
+								fi
+								comparguments -W line opt_args $opt_args_use_NUL_separators
+								if [[ "$action" = \ # ]]
+								then
+									_message -e "$subc" "$descr"
+									mesg=yes 
+									tried=yes 
+									alwopt=${alwopt:-yes} 
+								elif [[ "$action" = \(\(*\)\) ]]
+								then
+									eval ws\=\( "${action[3,-3]}" \)
+									_describe -t "$subc" "$descr" ws -M "$matcher" "$subopts[@]" || alwopt=${alwopt:-yes} 
+									tried=yes 
+								elif [[ "$action" = \(*\) ]]
+								then
+									eval ws\=\( "${action[2,-2]}" \)
+									_all_labels "$subc" expl "$descr" compadd "$subopts[@]" -a - ws || alwopt=${alwopt:-yes} 
+									tried=yes 
+								elif [[ "$action" = \{*\} ]]
+								then
+									while _next_label "$subc" expl "$descr"
+									do
+										eval "$action[2,-2]" && ret=0 
+									done
+									(( ret )) && alwopt=${alwopt:-yes} 
+									tried=yes 
+								elif [[ "$action" = \ * ]]
+								then
+									eval "action=( $action )"
+									while _next_label "$subc" expl "$descr"
+									do
+										"$action[@]" && ret=0 
+									done
+									(( ret )) && alwopt=${alwopt:-yes} 
+									tried=yes 
+								else
+									eval "action=( $action )"
+									while _next_label "$subc" expl "$descr"
+									do
+										"$action[1]" "$subopts[@]" "$expl[@]" "${(@)action[2,-1]}" && ret=0 
+									done
+									(( ret )) && alwopt=${alwopt:-yes} 
+									tried=yes 
+								fi
+							fi
+						fi
+					done
+				fi
+				if _requested options && [[ -z "$hasopts" && -z "$matched" && ( -z "$aret" || "$PREFIX" = "$origpre" ) ]] && {
+						! zstyle -T ":completion:${oldcontext%:*}:options" prefix-needed || [[ "$origpre" = [-+]* || -z "$aret$mesg$tried" ]]
+					}
+				then
+					local prevpre="$PREFIX" previpre="$IPREFIX" prevcontext="$curcontext" 
+					curcontext="${oldcontext%:*}:options" 
+					hasopts=yes 
+					PREFIX="$origpre" 
+					IPREFIX="$origipre" 
+					if [[ -z "$alwopt" || -z "$tried" || "$alwopt" = arg ]] && comparguments -s single
+					then
+						if [[ "$single" = direct ]]
+						then
+							_all_labels options expl option compadd -QS '' - "${PREFIX}${SUFFIX}"
+						elif [[ -z "$optarg" && "$single" = next ]]
+						then
+							_all_labels options expl option compadd -Q - "${PREFIX}${SUFFIX}"
+						elif [[ "$single" = equal ]]
+						then
+							_all_labels options expl option compadd -QqS= - "${PREFIX}${SUFFIX}"
+						else
+							tmp1=("$next[@]" "$direct[@]" "$odirect[@]" "$equal[@]") 
+							[[ "$PREFIX" = [-+]* ]] && tmp1=("${(@M)tmp1:#${PREFIX[1]}*}") 
+							[[ "$single" = next ]] && tmp1=("${(@)tmp1:#[-+]${PREFIX[-1]}((#e)|:*)}") 
+							[[ "$PREFIX" != --* ]] && tmp1=("${(@)tmp1:#--*}") 
+							tmp3=("${(M@)tmp1:#[-+]?[^:]*}") 
+							tmp1=("${(M@)tmp1:#[-+]?(|:*)}") 
+							tmp2=("${PREFIX}${(@M)^${(@)${(@)tmp1%%:*}#[-+]}:#?}") 
+							_describe -O option tmp1 tmp2 -S '' -- tmp3
+							[[ -n "$optarg" && "$single" = next && nm -eq $compstate[nmatches] ]] && _all_labels options expl option compadd -Q - "${PREFIX}${SUFFIX}"
+						fi
+						single=yes 
+					else
+						next+=("$odirect[@]") 
+						_describe -O option next -M "$matcher" -- direct -S '' -M "$matcher" -- equal -qS= -M "$matcher"
+					fi
+					PREFIX="$prevpre" 
+					IPREFIX="$previpre" 
+					curcontext="$prevcontext" 
+				fi
+				[[ -n "$tried" && "${${alwopt:+$origpre}:-$PREFIX}" != [-+]* ]] && break
+			done
+			if [[ -n "$opts" && -z "$aret" && -z "$matched" && ( -z "$tried" || -n "$alwopt" ) && nm -eq compstate[nmatches] ]]
+			then
+				PREFIX="$origpre" 
+				IPREFIX="$origipre" 
+				prefix="${PREFIX#*\=}" 
+				suffix="$SUFFIX" 
+				PREFIX="${PREFIX%%\=*}" 
+				SUFFIX='' 
+				compadd -M "$matcher" -D equal - "${(@)equal%%:*}"
+				if [[ $#equal -eq 1 ]]
+				then
+					PREFIX="$prefix" 
+					SUFFIX="$suffix" 
+					IPREFIX="${IPREFIX}${equal[1]%%:*}=" 
+					matched=yes 
+					comparguments -L "${equal[1]%%:*}" descrs actions subcs
+					_tags "$subcs[@]"
+					continue
+				fi
+			fi
+			break
+		done
+		[[ -z "$aret" || -z "$usecc" ]] && curcontext="$oldcontext" 
+		if [[ -n "$aret" ]]
+		then
+			[[ -n $rawret ]] && return 300
+		else
+			[[ -n "$noargs" && nm -eq "$compstate[nmatches]" ]] && _message "$noargs"
+		fi
+		[[ nm -ne "$compstate[nmatches]" ]]
+	else
+		return 1
+	fi
+}
+_arp () {
+	# undefined
+	builtin autoload -XUz
+}
+_arping () {
+	# undefined
+	builtin autoload -XUz
+}
+_arrays () {
+	# undefined
+	builtin autoload -XUz
+}
+_asciidoctor () {
+	# undefined
+	builtin autoload -XUz
+}
+_asciinema () {
+	# undefined
+	builtin autoload -XUz
+}
+_assign () {
+	# undefined
+	builtin autoload -XUz
+}
+_at () {
+	local context state line expl ret=1 
+	typeset -A opt_args
+	case $service in
+		(atrm) _arguments '-V[print version number]' '*:job number:->jobs' && ret=0  ;;
+		(atq) _arguments '-V[print version number]' '-q[uses specified queue]:a-z+A-Z' && ret=0  ;;
+		(at | batch) _arguments - new-job '-V[print version number]' '-q[uses specified queue, uppercase acts as batch]:a-z+A-Z' '-f[read job from file rather than from stdin]:file:_files' '-v[show the time the job will be executed]' '-m[send mail even if there was no output]' ':time:' - atq '-l[alias for atq]' - atrm '-d[alias for atrm]' - show-job '-c[cat specified jobs to stdout]:*:job number:->jobs' && ret=0  ;;
+	esac
+	case $state in
+		(jobs) _wanted -C $context jobs expl 'job number' compadd ${(M)${(f)"$(_call_program job atq)"}##<->} && ret=0  ;;
+	esac
+	return ret
+}
+_attr () {
+	# undefined
+	builtin autoload -XUz
+}
+_augeas () {
+	# undefined
+	builtin autoload -XUz
+}
+_auto-apt () {
+	# undefined
+	builtin autoload -XUz
+}
+_autocd () {
+	_command_names
+	local ret=$? 
+	[[ -o autocd ]] && _cd || return ret
+}
+_avahi () {
+	# undefined
+	builtin autoload -XUz
+}
+_awk () {
+	# undefined
+	builtin autoload -XUz
+}
+_axi-cache () {
+	# undefined
+	builtin autoload -XUz
+}
+_base64 () {
+	# undefined
+	builtin autoload -XUz
+}
+_basename () {
+	# undefined
+	builtin autoload -XUz
+}
+_basenc () {
+	# undefined
+	builtin autoload -XUz
+}
+_bash () {
+	# undefined
+	builtin autoload -XUz
+}
+_bash_completions () {
+	# undefined
+	builtin autoload -XUz
+}
+_baudrates () {
+	# undefined
+	builtin autoload -XUz
+}
+_baz () {
+	# undefined
+	builtin autoload -XUz
+}
+_be_name () {
+	# undefined
+	builtin autoload -XUz
+}
+_beadm () {
+	# undefined
+	builtin autoload -XUz
+}
+_beep () {
+	# undefined
+	builtin autoload -XUz
+}
+_bibtex () {
+	# undefined
+	builtin autoload -XUz
+}
+_bind_addresses () {
+	# undefined
+	builtin autoload -XUz
+}
+_bindkey () {
+	# undefined
+	builtin autoload -XUz
+}
+_bison () {
+	# undefined
+	builtin autoload -XUz
+}
+_bittorrent () {
+	# undefined
+	builtin autoload -XUz
+}
+_bogofilter () {
+	# undefined
+	builtin autoload -XUz
+}
+_bootctl () {
+	# undefined
+	builtin autoload -XUz
+}
+_bpf_filters () {
+	# undefined
+	builtin autoload -XUz
+}
+_bpython () {
+	# undefined
+	builtin autoload -XUz
+}
+_brace_parameter () {
+	# undefined
+	builtin autoload -XUz
+}
+_brctl () {
+	# undefined
+	builtin autoload -XUz
+}
+_bsd_disks () {
+	# undefined
+	builtin autoload -XUz
+}
+_bsd_pkg () {
+	# undefined
+	builtin autoload -XUz
+}
+_bsdconfig () {
+	# undefined
+	builtin autoload -XUz
+}
+_bsdinstall () {
+	# undefined
+	builtin autoload -XUz
+}
+_btrfs () {
+	# undefined
+	builtin autoload -XUz
+}
+_bts () {
+	# undefined
+	builtin autoload -XUz
+}
+_bug () {
+	# undefined
+	builtin autoload -XUz
+}
+_builtin () {
+	# undefined
+	builtin autoload -XUz
+}
+_busctl () {
+	# undefined
+	builtin autoload -XUz
+}
+_bzip2 () {
+	# undefined
+	builtin autoload -XUz
+}
+_bzr () {
+	# undefined
+	builtin autoload -XUz
+}
+_cabal () {
+	# undefined
+	builtin autoload -XUz
+}
+_cache_invalid () {
+	# undefined
+	builtin autoload -XUz
+}
+_caffeinate () {
+	# undefined
+	builtin autoload -XUz
+}
+_cal () {
+	# undefined
+	builtin autoload -XUz
+}
+_calendar () {
+	# undefined
+	builtin autoload -XUz
+}
+_call_function () {
+	# undefined
+	builtin autoload -XUz
+}
+_call_program () {
+	local -xi COLUMNS=999 
+	local curcontext="${curcontext}" tmp err_fd=-1 clocale='_comp_locale;' 
+	local -a prefix
+	if [[ "$1" = -p ]]
+	then
+		shift
+		if (( $#_comp_priv_prefix ))
+		then
+			curcontext="${curcontext%:*}/${${(@M)_comp_priv_prefix:#^*[^\\]=*}[1]}:" 
+			zstyle -t ":completion:${curcontext}:${1}" gain-privileges && prefix=($_comp_priv_prefix) 
+		fi
+	elif [[ "$1" = -l ]]
+	then
+		shift
+		clocale='' 
+	fi
+	if (( ${debug_fd:--1} > 2 )) || [[ ! -t 2 ]]
+	then
+		exec {err_fd}>&2
+	else
+		exec {err_fd}> /dev/null
+	fi
+	{
+		if zstyle -s ":completion:${curcontext}:${1}" command tmp
+		then
+			if [[ "$tmp" = -* ]]
+			then
+				eval $clocale "$tmp[2,-1]" "$argv[2,-1]"
+			else
+				eval $clocale $prefix "$tmp"
+			fi
+		else
+			eval $clocale $prefix "$argv[2,-1]"
+		fi 2>&$err_fd
+	} always {
+		exec {err_fd}>&-
+	}
+}
+_call_whatis () {
+	case "$(whatis --version)" in
+		("whatis from "*) local -A args
+			zparseopts -D -A args s: r:
+			apropos "${args[-r]:-"$@"}" | fgrep "($args[-s]" ;;
+		(*) whatis "$@" ;;
+	esac
+}
+_canonical_paths () {
+	# undefined
+	builtin autoload -XUz
+}
+_capabilities () {
+	# undefined
+	builtin autoload -XUz
+}
+_cargo () {
+	# undefined
+	builtin autoload -XUz
+}
+_cat () {
+	local -a args
+	if _pick_variant gnu=GNU unix --version
+	then
+		args=('(-A --show-all)'{-A,--show-all}'[equivalent to -vET]' '(-b --number-nonblank -n --number)'{-b,--number-nonblank}'[number nonempty output lines, overrides -n]' '-e[equivalent to -vE]' '(-E --show-ends)'{-E,--show-ends}'[display $ at end of each line]' '(-n --number)'{-n,--number}'[number all output lines]' '(-s --squeeze-blank)'{-s,--squeeze-blank}'[suppress repeated empty output lines]' '-t[equivalent to -vT]' '(-T --show-tabs)'{-T,--show-tabs}'[display TAB characters as ^I]' '-u[ignored]' '(-v --show-nonprinting)'{-v,--show-nonprinting}'[use ^ and M- notation, except for LFD and TAB]' '(- : *)--help[display help and exit]' '(- : *)--version[output version information and exit]' '*: :_files') 
+	elif [[ "$OSTYPE" == (*bsd|dragonfly|darwin)* ]]
+	then
+		args=(-A "-*" '(-n)-b[number non-blank output lines]' '(-v)-e[display $ at the end of each line (implies -v)]' '-n[number all output lines]' '-s[squeeze multiple blank lines into one]' '(-v)-t[display tab as ^I (implies -v)]' '-u[do not buffer output]' '-v[display non-printing chars as ^X or M-a]' '*: :_files') 
+		[[ $OSTYPE = (free|net)bsd* ]] && args+=('-l[set a lock on the stdout file descriptor]') 
+		[[ $OSTYPE = netbsd* ]] && args+=('-B+[read with buffer of specified size]:size (bytes)' '-f[only attempt to display regular files]') 
+	elif [[ $OSTYPE = solaris* ]]
+	then
+		args=(-A "-*" '(-b)-n[number all output lines]' '(-n)-b[number non-blank output lines]' "-u[don't buffer output]" '-s[be silent about non-existent files]' '-v[display non-printing chars as ^X or M-a]' '-e[display $ at the end of each line (requires -v)]' '-t[display tab as ^I and formfeeds and ^L (requires -v)]' '*: :_files') 
+	else
+		args=('-n[number all output lines]' '-u[do not buffer output]' '*: :_files') 
+	fi
+	_arguments -s -S $args
+}
+_ccal () {
+	# undefined
+	builtin autoload -XUz
+}
+_cd () {
+	_cd_options () {
+		_arguments -s '-q[quiet, no output or use of hooks]' '-s[refuse to use paths with symlinks]' '(-P)-L[retain symbolic links ignoring CHASE_LINKS]' '(-L)-P[resolve symbolic links as CHASE_LINKS]'
+	}
+	setopt localoptions nonomatch
+	local expl ret=1 curarg 
+	integer argstart=2 noopts match mbegin mend 
+	if (( CURRENT > 1 ))
+	then
+		while [[ $words[$argstart] = -* && argstart -lt CURRENT ]]
+		do
+			curarg=$words[$argstart] 
+			[[ $curarg = -<-> ]] && break
+			(( argstart++ ))
+			[[ $curarg = -- ]] && noopts=1  && break
+		done
+	fi
+	if [[ CURRENT -eq $((argstart+1)) ]]
+	then
+		local rep
+		rep=(${~PWD/$words[$argstart]/*}~$PWD(-/)) 
+		rep=(${${rep#${PWD%%$words[$argstart]*}}%${PWD#*$words[$argstart]}}) 
+		(( $#rep )) && _wanted -C replacement strings expl replacement compadd -a rep
+	else
+		if [[ "$PREFIX" == (#b)(\~|)[^/]# && ( -n "$match[1]" || ( CURRENT -gt 1 && ! -o cdablevars ) ) ]]
+		then
+			_directory_stack && ret=0 
+		fi
+		local -a tmpWpath
+		if [[ $PREFIX = (|*/)../* ]]
+		then
+			local tmpprefix
+			tmpprefix=$(cd ${PREFIX%/*} >&/dev/null && print $PWD) 
+			if [[ -n $tmpprefix ]]
+			then
+				tmpWpath=(-W $tmpprefix) 
+				IPREFIX=${IPREFIX}${PREFIX%/*}/ 
+				PREFIX=${PREFIX##*/} 
+			fi
+		fi
+		if [[ $PREFIX != (\~|/|./|../)* && $IPREFIX != ../* ]]
+		then
+			local tmpcdpath alt
+			alt=() 
+			tmpcdpath=(${${(@)cdpath:#.}:#$PWD}) 
+			(( $#tmpcdpath )) && alt=('path-directories:directory in cdpath:_path_files -W tmpcdpath -/') 
+			if [[ -o cdablevars && -n "$PREFIX" && "$PREFIX" != <-> ]]
+			then
+				if [[ "$PREFIX" != */* ]]
+				then
+					alt=("$alt[@]" 'named-directories: : _tilde') 
+				else
+					local oipre="$IPREFIX" opre="$PREFIX" dirpre dir 
+					dirpre="${PREFIX%%/*}/" 
+					IPREFIX="$IPREFIX$dirpre" 
+					eval "dir=( ~$dirpre )"
+					PREFIX="${PREFIX#*/}" 
+					[[ $#dir -eq 1 && "$dir[1]" != "~$dirpre" ]] && _wanted named-directories expl 'directory after cdablevar' _path_files -W dir -/ && ret=0 
+					PREFIX="$opre" 
+					IPREFIX="$oipre" 
+				fi
+			fi
+			[[ CURRENT -ne 1 || ( -z "$path[(r).]" && $PREFIX != */* ) ]] && alt=("${cdpath+local-}directories:${cdpath+local }directory:_path_files ${(j: :)${(@q)tmpWpath}} -/" "$alt[@]") 
+			if [[ CURRENT -eq argstart && noopts -eq 0 && $PREFIX = -* ]] && zstyle -t ":completion:${curcontext}:options" complete-options
+			then
+				alt=("$service-options:$service option:_cd_options" "$alt[@]") 
+			fi
+			_alternative "$alt[@]" && ret=0 
+			return ret
+		fi
+		[[ CURRENT -ne 1 ]] && _wanted directories expl directory _path_files $tmpWpath -/ && ret=0 
+		return ret
+	fi
+}
+_cd_options () {
+	_arguments -s '-q[quiet, no output or use of hooks]' '-s[refuse to use paths with symlinks]' '(-P)-L[retain symbolic links ignoring CHASE_LINKS]' '(-L)-P[resolve symbolic links as CHASE_LINKS]'
+}
+_cdbs-edit-patch () {
+	# undefined
+	builtin autoload -XUz
+}
+_cdcd () {
+	# undefined
+	builtin autoload -XUz
+}
+_cdr () {
+	# undefined
+	builtin autoload -XUz
+}
+_cdrdao () {
+	# undefined
+	builtin autoload -XUz
+}
+_cdrecord () {
+	# undefined
+	builtin autoload -XUz
+}
+_chattr () {
+	# undefined
+	builtin autoload -XUz
+}
+_chcon () {
+	# undefined
+	builtin autoload -XUz
+}
+_chflags () {
+	# undefined
+	builtin autoload -XUz
+}
+_chkconfig () {
+	# undefined
+	builtin autoload -XUz
+}
+_chmod () {
+	# undefined
+	builtin autoload -XUz
+}
+_choom () {
+	# undefined
+	builtin autoload -XUz
+}
+_chown () {
+	# undefined
+	builtin autoload -XUz
+}
+_chroot () {
+	# undefined
+	builtin autoload -XUz
+}
+_chrt () {
+	# undefined
+	builtin autoload -XUz
+}
+_chsh () {
+	# undefined
+	builtin autoload -XUz
+}
+_cksum () {
+	# undefined
+	builtin autoload -XUz
+}
+_clay () {
+	# undefined
+	builtin autoload -XUz
+}
+_cmdambivalent () {
+	# undefined
+	builtin autoload -XUz
+}
+_cmdstring () {
+	# undefined
+	builtin autoload -XUz
+}
+_cmp () {
+	# undefined
+	builtin autoload -XUz
+}
+_code () {
+	# undefined
+	builtin autoload -XUz
+}
+_column () {
+	# undefined
+	builtin autoload -XUz
+}
+_combination () {
+	# undefined
+	builtin autoload -XUz
+}
+_comm () {
+	# undefined
+	builtin autoload -XUz
+}
+_command () {
+	# undefined
+	builtin autoload -XUz
+}
+_command_names () {
+	local args defs expl ffilt
+	zstyle -t ":completion:${curcontext}:commands" rehash && rehash
+	zstyle -t ":completion:${curcontext}:functions" prefix-needed && [[ $PREFIX != [_.]* ]] && ffilt='[(I)[^_.]*]' 
+	defs=('commands:external command:_path_commands') 
+	if [[ -n "$path[(r).]" || $PREFIX = */* ]]
+	then
+		defs+=('executables:executable file:_files -g \*\(-\*\)') 
+	else
+		_description executables expl 'executable file'
+	fi
+	if [[ "$1" = -e ]]
+	then
+		shift
+	elif (( ${#precommands:|builtin_precommands} ))
+	then
+		
+	else
+		[[ "$1" = - ]] && shift
+		defs=("$defs[@]" 'builtins:builtin command:compadd -Qk builtins' "functions:shell function:compadd -k 'functions$ffilt'" 'aliases:alias:compadd -Qk aliases' 'suffix-aliases:suffix alias:_suffix_alias_files' 'reserved-words:reserved word:compadd -Qk reswords' 'jobs:: _jobs -t' 'parameters:: _parameters -g "^*(readonly|association)*" -qS= -r "\n\t\- =[+"' 'parameters:: _parameters -g "*association*~*readonly*" -qS\[ -r "\n\t\- =[+"') 
+	fi
+	args=("$@") 
+	local -a cmdpath
+	zstyle -a ":completion:${curcontext}" command-path cmdpath
+	if (( ! $#cmdpath && $#_comp_priv_prefix ))
+	then
+		cmdpath=($path ${path/%\/bin//sbin}) 
+		cmdpath=(${(u)^cmdpath}(/-N)) 
+	fi
+	if (( $#cmdpath ))
+	then
+		local -a +h path
+		local -A +h commands
+		path=($cmdpath:A) 
+	fi
+	_alternative -O args "$defs[@]"
+}
+_comp_locale () {
+	# undefined
+	builtin autoload -XUz
+}
+_compadd () {
+	# undefined
+	builtin autoload -XUz
+}
+_compdef () {
+	# undefined
+	builtin autoload -XUz
+}
+_complete () {
+	local comp name oldcontext ret=1 service 
+	typeset -T curcontext="$curcontext" ccarray 
+	oldcontext="$curcontext" 
+	if [[ -n "$compcontext" ]]
+	then
+		if [[ "${(t)compcontext}" = *array* ]]
+		then
+			local expl
+			_wanted values expl value compadd -a - compcontext
+		elif [[ "${(t)compcontext}" = *assoc* ]]
+		then
+			local expl tmp i
+			tmp=() 
+			for i in "${(@k)compcontext[(R)*[^[:blank:]]]}"
+			do
+				tmp=("$tmp[@]" "${i}:${compcontext[$i]}") 
+			done
+			tmp=("$tmp[@]" "${(k@)compcontext[(R)[[:blank:]]#]}") 
+			_describe -t values value tmp
+		elif [[ "$compcontext" = *:*:* ]]
+		then
+			local tag="${${compcontext%%:*}:-values}" 
+			local descr="${${${compcontext#${tag}:}%%:*}:-value}" 
+			local action="${compcontext#${tag}:${descr}:}" expl ws ret=1 
+			case "$action" in
+				(\ #) _message -e "$tag" "$descr" ;;
+				(\(\(*\)\)) eval ws\=\( "${action[3,-3]}" \)
+					_describe -t "$tag" "$descr" ws ;;
+				(\(*\)) eval ws\=\( "${action[2,-2]}" \)
+					_wanted "$tag" expl "$descr" compadd -a - ws ;;
+				(\{*\}) _tags "$tag"
+					while _tags
+					do
+						while _next_label "$tag" expl "$descr"
+						do
+							eval "$action[2,-2]" && ret=0 
+						done
+						(( ret )) || break
+					done ;;
+				(\ *) eval ws\=\( "$action" \)
+					_tags "$tag"
+					while _tags
+					do
+						while _next_label "$tag" expl "$descr"
+						do
+							"$ws[@]"
+						done
+						(( ret )) || break
+					done ;;
+				(*) eval ws\=\( "$action" \)
+					_tags "$tag"
+					while _tags
+					do
+						while _next_label "$tag" expl "$descr"
+						do
+							"$ws[1]" "$expl[@]" "${(@)ws[2,-1]}"
+						done
+						(( ret )) || break
+					done ;;
+			esac
+		else
+			ccarray[3]="$compcontext" 
+			comp="$_comps[$compcontext]" 
+			[[ -n "$comp" ]] && eval "$comp"
+		fi
+		return
+	fi
+	comp="$_comps[-first-]" 
+	if [[ -n "$comp" ]]
+	then
+		service="${_services[-first-]:--first-}" 
+		ccarray[3]=-first- 
+		eval "$comp" && ret=0 
+		if [[ "$_compskip" = all ]]
+		then
+			_compskip= 
+			return ret
+		fi
+	fi
+	[[ -n $compstate[vared] ]] && compstate[context]=vared 
+	ret=1 
+	if [[ "$compstate[context]" = command ]]
+	then
+		curcontext="$oldcontext" 
+		_normal -s && ret=0 
+	else
+		local cname="-${compstate[context]:s/_/-/}-" 
+		ccarray[3]="$cname" 
+		comp="$_comps[$cname]" 
+		service="${_services[$cname]:-$cname}" 
+		if [[ -z "$comp" ]]
+		then
+			if [[ "$_compskip" = *default* ]]
+			then
+				_compskip= 
+				return 1
+			fi
+			comp="$_comps[-default-]" 
+			service="${_services[-default-]:--default-}" 
+		fi
+		[[ -n "$comp" ]] && eval "$comp" && ret=0 
+	fi
+	_compskip= 
+	return ret
+}
+_complete_debug () {
+	# undefined
+	builtin autoload -XUz
+}
+_complete_help () {
+	# undefined
+	builtin autoload -XUz
+}
+_complete_help_generic () {
+	# undefined
+	builtin autoload -XUz
+}
+_complete_tag () {
+	# undefined
+	builtin autoload -XUz
+}
+_completers () {
+	# undefined
+	builtin autoload -XUz
+}
+_composer () {
+	# undefined
+	builtin autoload -XUz
+}
+_compress () {
+	# undefined
+	builtin autoload -XUz
+}
+_condition () {
+	# undefined
+	builtin autoload -XUz
+}
+_configure () {
+	# undefined
+	builtin autoload -XUz
+}
+_coreadm () {
+	# undefined
+	builtin autoload -XUz
+}
+_correct () {
+	# undefined
+	builtin autoload -XUz
+}
+_correct_filename () {
+	# undefined
+	builtin autoload -XUz
+}
+_correct_word () {
+	# undefined
+	builtin autoload -XUz
+}
+_cowsay () {
+	# undefined
+	builtin autoload -XUz
+}
+_cp () {
+	# undefined
+	builtin autoload -XUz
+}
+_cpio () {
+	# undefined
+	builtin autoload -XUz
+}
+_cplay () {
+	# undefined
+	builtin autoload -XUz
+}
+_cpupower () {
+	# undefined
+	builtin autoload -XUz
+}
+_crontab () {
+	# undefined
+	builtin autoload -XUz
+}
+_cryptsetup () {
+	# undefined
+	builtin autoload -XUz
+}
+_cscope () {
+	# undefined
+	builtin autoload -XUz
+}
+_csplit () {
+	# undefined
+	builtin autoload -XUz
+}
+_cssh () {
+	# undefined
+	builtin autoload -XUz
+}
+_csup () {
+	# undefined
+	builtin autoload -XUz
+}
+_ctags () {
+	# undefined
+	builtin autoload -XUz
+}
+_ctags_tags () {
+	# undefined
+	builtin autoload -XUz
+}
+_cu () {
+	# undefined
+	builtin autoload -XUz
+}
+_curl () {
+	# undefined
+	builtin autoload -XUz
+}
+_cut () {
+	# undefined
+	builtin autoload -XUz
+}
+_cvs () {
+	# undefined
+	builtin autoload -XUz
+}
+_cvsup () {
+	# undefined
+	builtin autoload -XUz
+}
+_cygcheck () {
+	# undefined
+	builtin autoload -XUz
+}
+_cygpath () {
+	# undefined
+	builtin autoload -XUz
+}
+_cygrunsrv () {
+	# undefined
+	builtin autoload -XUz
+}
+_cygserver () {
+	# undefined
+	builtin autoload -XUz
+}
+_cygstart () {
+	# undefined
+	builtin autoload -XUz
+}
+_dak () {
+	# undefined
+	builtin autoload -XUz
+}
+_darcs () {
+	# undefined
+	builtin autoload -XUz
+}
+_date () {
+	# undefined
+	builtin autoload -XUz
+}
+_date_formats () {
+	# undefined
+	builtin autoload -XUz
+}
+_dates () {
+	# undefined
+	builtin autoload -XUz
+}
+_dbus () {
+	# undefined
+	builtin autoload -XUz
+}
+_dchroot () {
+	# undefined
+	builtin autoload -XUz
+}
+_dchroot-dsa () {
+	# undefined
+	builtin autoload -XUz
+}
+_dconf () {
+	# undefined
+	builtin autoload -XUz
+}
+_dcop () {
+	# undefined
+	builtin autoload -XUz
+}
+_dcut () {
+	# undefined
+	builtin autoload -XUz
+}
+_dd () {
+	# undefined
+	builtin autoload -XUz
+}
+_deb_architectures () {
+	# undefined
+	builtin autoload -XUz
+}
+_deb_codenames () {
+	# undefined
+	builtin autoload -XUz
+}
+_deb_files () {
+	# undefined
+	builtin autoload -XUz
+}
+_deb_packages () {
+	# undefined
+	builtin autoload -XUz
+}
+_debbugs_bugnumber () {
+	# undefined
+	builtin autoload -XUz
+}
+_debchange () {
+	# undefined
+	builtin autoload -XUz
+}
+_debcheckout () {
+	# undefined
+	builtin autoload -XUz
+}
+_debdiff () {
+	# undefined
+	builtin autoload -XUz
+}
+_debfoster () {
+	# undefined
+	builtin autoload -XUz
+}
+_deborphan () {
+	# undefined
+	builtin autoload -XUz
+}
+_debsign () {
+	# undefined
+	builtin autoload -XUz
+}
+_debsnap () {
+	# undefined
+	builtin autoload -XUz
+}
+_debuild () {
+	# undefined
+	builtin autoload -XUz
+}
+_default () {
+	# undefined
+	builtin autoload -XUz
+}
+_defaults () {
+	# undefined
+	builtin autoload -XUz
+}
+_delimiters () {
+	# undefined
+	builtin autoload -XUz
+}
+_describe () {
+	# undefined
+	builtin autoload -XUz
+}
+_description () {
+	local name nopt xopt format gname hidden hide match opts tag
+	local -a ign gropt sort
+	local -a match mbegin mend
+	opts=() 
+	xopt=(-X) 
+	nopt=() 
+	zparseopts -K -D -a nopt 1 2 V=gropt J=ign x=xopt
+	3="${${3##[[:blank:]]#}%%[[:blank:]]#}" 
+	[[ -n "$3" ]] && _lastdescr=("$_lastdescr[@]" "$3") 
+	zstyle -s ":completion:${curcontext}:$1" group-name gname && [[ -z "$gname" ]] && gname="$1" 
+	_setup "$1" "${gname:--default-}"
+	name="$2" 
+	zstyle -s ":completion:${curcontext}:$1" format format || zstyle -s ":completion:${curcontext}:descriptions" format format
+	if zstyle -s ":completion:${curcontext}:$1" hidden hidden && [[ "$hidden" = (all|yes|true|1|on) ]]
+	then
+		[[ "$hidden" = all ]] && format='' 
+		opts=(-n) 
+	fi
+	zstyle -s ":completion:${curcontext}:$1" matcher match && opts=($opts -M "$match") 
+	[[ -n "$_matcher" ]] && opts=($opts -M "$_matcher") 
+	if [[ -z "$gropt" ]]
+	then
+		if zstyle -a ":completion:${curcontext}:$1" sort sort || zstyle -a ":completion:${curcontext}:" sort sort
+		then
+			if [[ -z "${(@)sort:#(match|numeric|reverse)}" ]]
+			then
+				gropt=(-o ${(j.,.)sort}) 
+			elif [[ "$sort" != (yes|true|1|on|menu) ]]
+			then
+				gropt=(-o nosort) 
+			fi
+		fi
+	else
+		gropt=(-o nosort) 
+	fi
+	if [[ -z "$_comp_no_ignore" ]]
+	then
+		zstyle -a ":completion:${curcontext}:$1" ignored-patterns _comp_ignore || _comp_ignore=() 
+		if zstyle -s ":completion:${curcontext}:$1" ignore-line hidden
+		then
+			local -a qwords
+			qwords=(${words//(#m)[\[\]()\\*?#<>~\^\|]/\\$MATCH}) 
+			case "$hidden" in
+				(true | yes | on | 1) _comp_ignore+=($qwords)  ;;
+				(current) _comp_ignore+=($qwords[CURRENT])  ;;
+				(current-shown) [[ "$compstate[old_list]" = *shown* ]] && _comp_ignore+=($qwords[CURRENT])  ;;
+				(other) _comp_ignore+=($qwords[1,CURRENT-1] $qwords[CURRENT+1,-1])  ;;
+			esac
+		fi
+		(( $#_comp_ignore )) && opts=(-F _comp_ignore $opts) 
+	else
+		_comp_ignore=() 
+	fi
+	tag="$1" 
+	shift 2
+	if [[ -z "$1" && $# -eq 1 ]]
+	then
+		format= 
+	elif [[ -n "$format" ]]
+	then
+		if [[ -z $2 ]]
+		then
+			argv+=(h:${1%%( ##\((#b)([^\)]#[^0-9-][^\)]#)(#B)\)|)( ##\((#b)([0-9-]##)(#B)\)|)( ##\[(#b)([^\]]##)(#B)\]|)}) 
+			[[ -n $match[1] ]] && argv+=(m:$match[1]) 
+			[[ -n $match[2] ]] && argv+=(r:$match[2]) 
+			[[ -n $match[3] ]] && argv+=(o:$match[3]) 
+		fi
+		zformat -F format "$format" "d:$1" "${(@)argv[2,-1]}"
+	fi
+	if [[ -n "$gname" ]]
+	then
+		if [[ -n "$format" ]]
+		then
+			set -A "$name" "$opts[@]" "$nopt[@]" "$gropt[@]" -J "$gname" "$xopt" "$format"
+		else
+			set -A "$name" "$opts[@]" "$nopt[@]" "$gropt[@]" -J "$gname"
+		fi
+	else
+		if [[ -n "$format" ]]
+		then
+			set -A "$name" "$opts[@]" "$nopt[@]" "$gropt[@]" -J -default- "$xopt" "$format"
+		else
+			set -A "$name" "$opts[@]" "$nopt[@]" "$gropt[@]" -J -default-
+		fi
+	fi
+	if ! (( ${funcstack[2,-1][(I)_description]} ))
+	then
+		local fakestyle descr
+		for fakestyle in fake fake-always
+		do
+			zstyle -a ":completion:${curcontext}:$tag" $fakestyle match || continue
+			descr=("${(@M)match:#*[^\\]:*}") 
+			opts=("${(@P)name}") 
+			if [[ $fakestyle = fake-always && $opts[1,2] = "-F _comp_ignore" ]]
+			then
+				shift 2 opts
+			fi
+			compadd "${(@)opts}" - "${(@)${(@)match:#*[^\\]:*}:s/\\:/:/}"
+			(( $#descr )) && _describe -t "$tag" '' descr "${(@)opts}"
+		done
+	fi
+	return 0
+}
+_devtodo () {
+	# undefined
+	builtin autoload -XUz
+}
+_df () {
+	# undefined
+	builtin autoload -XUz
+}
+_dhclient () {
+	# undefined
+	builtin autoload -XUz
+}
+_dhcpinfo () {
+	# undefined
+	builtin autoload -XUz
+}
+_dict () {
+	# undefined
+	builtin autoload -XUz
+}
+_dict_words () {
+	# undefined
+	builtin autoload -XUz
+}
+_diff () {
+	# undefined
+	builtin autoload -XUz
+}
+_diff3 () {
+	# undefined
+	builtin autoload -XUz
+}
+_diff_options () {
+	# undefined
+	builtin autoload -XUz
+}
+_diffstat () {
+	# undefined
+	builtin autoload -XUz
+}
+_dig () {
+	# undefined
+	builtin autoload -XUz
+}
+_dir_list () {
+	# undefined
+	builtin autoload -XUz
+}
+_directories () {
+	# undefined
+	builtin autoload -XUz
+}
+_directory_stack () {
+	setopt localoptions nonomatch
+	local expl list lines revlines disp sep
+	[[ $PREFIX = [-+]* ]] || return 1
+	zstyle -s ":completion:${curcontext}:directory-stack" list-separator sep || sep=-- 
+	if zstyle -T ":completion:${curcontext}:directory-stack" verbose
+	then
+		lines=("${(D)dirstack[@]}") 
+		if [[ ( $PREFIX[1] = - && ! -o pushdminus ) || ( $PREFIX[1] = + && -o pushdminus ) ]]
+		then
+			integer i
+			revlines=($lines) 
+			for ((i = 1; i <= $#lines; i++ )) do
+				lines[$i]="$((i-1)) $sep ${revlines[-$i]##[0-9]#[	 ]#}" 
+			done
+		else
+			for ((i = 1; i <= $#lines; i++ )) do
+				lines[$i]="$i $sep ${lines[$i]##[0-9]#[	 ]#}" 
+			done
+		fi
+		list=(${PREFIX[1]}${^lines%% *}) 
+		disp=(-ld lines) 
+	else
+		list=(${PREFIX[1]}{0..${#dirstack}}) 
+		disp=() 
+	fi
+	_wanted -V directory-stack expl 'directory stack' compadd "$@" "$disp[@]" -Q -a list
+}
+_dirs () {
+	# undefined
+	builtin autoload -XUz
+}
+_disable () {
+	# undefined
+	builtin autoload -XUz
+}
+_dispatch () {
+	local comp pat val name i ret=1 _compskip="$_compskip" 
+	local curcontext="$curcontext" service str noskip 
+	local -a match mbegin mend
+	if [[ "$1" = -s ]]
+	then
+		noskip=yes 
+		shift
+	fi
+	[[ -z "$noskip" ]] && _compskip= 
+	curcontext="${curcontext%:*:*}:${1}:" 
+	shift
+	if [[ "$_compskip" != (all|*patterns*) ]]
+	then
+		for str in "$@"
+		do
+			[[ -n "$str" ]] || continue
+			service="${_services[$str]:-$str}" 
+			for i in "${(@)_patcomps[(K)$str]}"
+			do
+				if [[ $i = (#b)"="([^=]#)"="(*) ]]
+				then
+					service=$match[1] 
+					i=$match[2] 
+				fi
+				eval "$i" && ret=0 
+				if [[ "$_compskip" = *patterns* ]]
+				then
+					break
+				elif [[ "$_compskip" = all ]]
+				then
+					_compskip='' 
+					return ret
+				fi
+			done
+		done
+	fi
+	ret=1 
+	for str in "$@"
+	do
+		[[ -n "$str" ]] || continue
+		str=${(Q)str} 
+		name="$str" 
+		comp="${_comps[$str]}" 
+		service="${_services[$str]:-$str}" 
+		[[ -z "$comp" ]] || break
+	done
+	if [[ -n "$comp" && "$name" != "${argv[-1]}" ]]
+	then
+		_compskip=patterns 
+		eval "$comp" && ret=0 
+		[[ "$_compskip" = (all|*patterns*) ]] && return ret
+	fi
+	if [[ "$_compskip" != (all|*patterns*) ]]
+	then
+		for str
+		do
+			[[ -n "$str" ]] || continue
+			service="${_services[$str]:-$str}" 
+			for i in "${(@)_postpatcomps[(K)$str]}"
+			do
+				_compskip=default 
+				eval "$i" && ret=0 
+				if [[ "$_compskip" = *patterns* ]]
+				then
+					break
+				elif [[ "$_compskip" = all ]]
+				then
+					_compskip='' 
+					return ret
+				fi
+			done
+		done
+	fi
+	[[ "$name" = "${argv[-1]}" && -n "$comp" && "$_compskip" != (all|*default*) ]] && service="${_services[$name]:-$name}"  && eval "$comp" && ret=0 
+	_compskip='' 
+	return ret
+}
+_django () {
+	# undefined
+	builtin autoload -XUz
+}
+_dkms () {
+	# undefined
+	builtin autoload -XUz
+}
+_dladm () {
+	# undefined
+	builtin autoload -XUz
+}
+_dlocate () {
+	# undefined
+	builtin autoload -XUz
+}
+_dmesg () {
+	# undefined
+	builtin autoload -XUz
+}
+_dmidecode () {
+	# undefined
+	builtin autoload -XUz
+}
+_dnf () {
+	# undefined
+	builtin autoload -XUz
+}
+_dns_types () {
+	# undefined
+	builtin autoload -XUz
+}
+_doas () {
+	# undefined
+	builtin autoload -XUz
+}
+_domains () {
+	# undefined
+	builtin autoload -XUz
+}
+_dos2unix () {
+	# undefined
+	builtin autoload -XUz
+}
+_dpatch-edit-patch () {
+	# undefined
+	builtin autoload -XUz
+}
+_dpkg () {
+	# undefined
+	builtin autoload -XUz
+}
+_dpkg-buildpackage () {
+	# undefined
+	builtin autoload -XUz
+}
+_dpkg-cross () {
+	# undefined
+	builtin autoload -XUz
+}
+_dpkg-parsechangelog () {
+	# undefined
+	builtin autoload -XUz
+}
+_dpkg-repack () {
+	# undefined
+	builtin autoload -XUz
+}
+_dpkg_source () {
+	# undefined
+	builtin autoload -XUz
+}
+_dput () {
+	# undefined
+	builtin autoload -XUz
+}
+_drill () {
+	# undefined
+	builtin autoload -XUz
+}
+_dropbox () {
+	# undefined
+	builtin autoload -XUz
+}
+_dscverify () {
+	# undefined
+	builtin autoload -XUz
+}
+_dsh () {
+	# undefined
+	builtin autoload -XUz
+}
+_dtrace () {
+	# undefined
+	builtin autoload -XUz
+}
+_dtruss () {
+	# undefined
+	builtin autoload -XUz
+}
+_du () {
+	# undefined
+	builtin autoload -XUz
+}
+_dumpadm () {
+	# undefined
+	builtin autoload -XUz
+}
+_dumper () {
+	# undefined
+	builtin autoload -XUz
+}
+_dupload () {
+	# undefined
+	builtin autoload -XUz
+}
+_dvi () {
+	# undefined
+	builtin autoload -XUz
+}
+_dynamic_directory_name () {
+	# undefined
+	builtin autoload -XUz
+}
+_e2label () {
+	# undefined
+	builtin autoload -XUz
+}
+_ecasound () {
+	# undefined
+	builtin autoload -XUz
+}
+_echotc () {
+	# undefined
+	builtin autoload -XUz
+}
+_echoti () {
+	# undefined
+	builtin autoload -XUz
+}
+_ed () {
+	# undefined
+	builtin autoload -XUz
+}
+_elfdump () {
+	# undefined
+	builtin autoload -XUz
+}
+_elinks () {
+	# undefined
+	builtin autoload -XUz
+}
+_email_addresses () {
+	# undefined
+	builtin autoload -XUz
+}
+_emulate () {
+	# undefined
+	builtin autoload -XUz
+}
+_enable () {
+	# undefined
+	builtin autoload -XUz
+}
+_enscript () {
+	# undefined
+	builtin autoload -XUz
+}
+_entr () {
+	# undefined
+	builtin autoload -XUz
+}
+_env () {
+	# undefined
+	builtin autoload -XUz
+}
+_eog () {
+	# undefined
+	builtin autoload -XUz
+}
+_equal () {
+	# undefined
+	builtin autoload -XUz
+}
+_espeak () {
+	# undefined
+	builtin autoload -XUz
+}
+_etags () {
+	# undefined
+	builtin autoload -XUz
+}
+_ethtool () {
+	# undefined
+	builtin autoload -XUz
+}
+_evince () {
+	# undefined
+	builtin autoload -XUz
+}
+_exec () {
+	# undefined
+	builtin autoload -XUz
+}
+_expand () {
+	# undefined
+	builtin autoload -XUz
+}
+_expand_alias () {
+	# undefined
+	builtin autoload -XUz
+}
+_expand_word () {
+	# undefined
+	builtin autoload -XUz
+}
+_extensions () {
+	# undefined
+	builtin autoload -XUz
+}
+_external_pwds () {
+	# undefined
+	builtin autoload -XUz
+}
+_fakeroot () {
+	# undefined
+	builtin autoload -XUz
+}
+_fbsd_architectures () {
+	# undefined
+	builtin autoload -XUz
+}
+_fbsd_device_types () {
+	# undefined
+	builtin autoload -XUz
+}
+_fc () {
+	# undefined
+	builtin autoload -XUz
+}
+_fd () {
+	# undefined
+	builtin autoload -XUz
+}
+_feh () {
+	# undefined
+	builtin autoload -XUz
+}
+_fetch () {
+	# undefined
+	builtin autoload -XUz
+}
+_fetchmail () {
+	# undefined
+	builtin autoload -XUz
+}
+_ffmpeg () {
+	# undefined
+	builtin autoload -XUz
+}
+_figlet () {
+	# undefined
+	builtin autoload -XUz
+}
+_file_descriptors () {
+	# undefined
+	builtin autoload -XUz
+}
+_file_flags () {
+	# undefined
+	builtin autoload -XUz
+}
+_file_modes () {
+	# undefined
+	builtin autoload -XUz
+}
+_file_systems () {
+	# undefined
+	builtin autoload -XUz
+}
+_files () {
+	local -a match mbegin mend
+	local -a subtree
+	local ret=1 
+	if _have_glob_qual $PREFIX
+	then
+		compset -p ${#match[1]}
+		compset -S '[^\)\|\~]#(|\))'
+		if [[ $_comp_caller_options[extendedglob] == on ]] && compset -P '\#'
+		then
+			_globflags && ret=0 
+		else
+			if [[ $_comp_caller_options[extendedglob] == on ]]
+			then
+				_describe -t globflags "glob flag" '(\#:introduce\ glob\ flag)' -Q -S '' && ret=0 
+			fi
+			_globquals && ret=0 
+		fi
+		return ret
+	elif [[ $_comp_caller_options[extendedglob] == on && $PREFIX = \(\#[^\)]# ]] && compset -P '\(\#'
+	then
+		_globflags && return
+	fi
+	local opts tmp glob pat pats expl tag i def descr end ign tried
+	local type sdef ignvars ignvar prepath oprefix rfiles rfile
+	zparseopts -a opts '/=tmp' 'f=tmp' 'g+:-=tmp' q n 1 2 P: S: r: R: W: x+: X+: M+: F: J+: V+: o+:
+	type="${(@j::M)${(@)tmp#-}#?}" 
+	if (( $tmp[(I)-g*] ))
+	then
+		glob="${${${(@)${(@M)tmp:#-g*}#-g}##[[:blank:]]#}%%[[:blank:]]#}" 
+		[[ "$glob" = *[^\\][[:blank:]]* ]] && glob="{${glob//(#b)([^\\])[[:blank:]]##/${match[1]},}}" 
+		[[ "$glob" = (#b)(*\()([^\|\~]##\)) && $match[2] != \#q* ]] && glob="${match[1]}#q${match[2]}" 
+	elif [[ $type = */* ]]
+	then
+		glob="*(#q-/)" 
+	fi
+	tmp=$opts[(I)-F] 
+	if (( tmp ))
+	then
+		ignvars=($=opts[tmp+1]) 
+		if [[ $ignvars = _comp_ignore ]]
+		then
+			ign=($_comp_ignore) 
+		elif [[ $ignvars = \(* ]]
+		then
+			ign=(${=ignvars[2,-2]}) 
+		else
+			ign=() 
+			for ignvar in $ignvars
+			do
+				ign+=(${(P)ignvar}) 
+			done
+			opts[tmp+1]=_comp_ignore 
+		fi
+	else
+		ign=() 
+	fi
+	if zstyle -a ":completion:${curcontext}:" file-patterns tmp
+	then
+		pats=() 
+		for i in ${tmp//\%p/${${glob:-\*}//:/\\:}}
+		do
+			if [[ $i = *[^\\]:* ]]
+			then
+				pats+=(" $i ") 
+			else
+				pats+=(" ${i}:files ") 
+			fi
+		done
+	elif zstyle -t ":completion:${curcontext}:" list-dirs-first
+	then
+		pats=(" *(-/):directories:directory ${${glob:-*}//:/\\:}(#q^-/):globbed-files" '*:all-files') 
+	else
+		pats=("${${glob:-*}//:/\\:}:globbed-files *(-/):directories" '*:all-files ') 
+	fi
+	tried=() 
+	for def in "$pats[@]"
+	do
+		eval "def=( ${${def//\\:/\\\\\\:}//(#b)([][()|*?^#~<>])/\\${match[1]}} )"
+		tmp="${(@M)def#*[^\\]:}" 
+		(( $tried[(I)${(q)tmp}] )) && continue
+		tried=("$tried[@]" "$tmp") 
+		for sdef in "$def[@]"
+		do
+			tag="${${sdef#*[^\\]:}%%:*}" 
+			pat="${${sdef%%:${tag}*}//\\:/:}" 
+			if [[ "$sdef" = *:${tag}:* ]]
+			then
+				descr="${(Q)sdef#*:${tag}:}" 
+				end= 
+			else
+				if (( $opts[(I)-X] ))
+				then
+					descr= 
+				else
+					descr=file 
+				fi
+				end=yes 
+			fi
+			_tags "$tag"
+			while _tags
+			do
+				_comp_ignore=() 
+				while _next_label "$tag" expl "$descr"
+				do
+					_comp_ignore=($_comp_ignore $ign) 
+					if [[ -n "$end" ]]
+					then
+						expl=("$opts[@]" "$expl[@]") 
+					else
+						expl+=("$opts[@]") 
+					fi
+					if _path_files -g "$pat" "$expl[@]"
+					then
+						ret=0 
+					elif [[ $PREFIX$SUFFIX != */* ]] && zstyle -a ":completion:${curcontext}:$tag" recursive-files rfiles
+					then
+						for rfile in $rfiles
+						do
+							if [[ $PWD/ = ${~rfile} ]]
+							then
+								if [[ -z $subtree ]]
+								then
+									subtree=(**/*(/)) 
+								fi
+								for prepath in $subtree
+								do
+									oprefix=$PREFIX 
+									PREFIX=$prepath/$PREFIX 
+									_path_files -g "$pat" "$expl[@]" && ret=0 
+									PREFIX=$oprefix 
+								done
+								break
+							fi
+						done
+					fi
+				done
+				(( ret )) || break
+			done
+			[[ "$pat" = '*' ]] && return ret
+		done
+		(( ret )) || return 0
+	done
+	return 1
+}
+_find () {
+	# undefined
+	builtin autoload -XUz
+}
+_find_net_interfaces () {
+	# undefined
+	builtin autoload -XUz
+}
+_findmnt () {
+	# undefined
+	builtin autoload -XUz
+}
+_finger () {
+	# undefined
+	builtin autoload -XUz
+}
+_fink () {
+	# undefined
+	builtin autoload -XUz
+}
+_first () {
+	
+}
+_flac () {
+	# undefined
+	builtin autoload -XUz
+}
+_flex () {
+	# undefined
+	builtin autoload -XUz
+}
+_floppy () {
+	# undefined
+	builtin autoload -XUz
+}
+_flowadm () {
+	# undefined
+	builtin autoload -XUz
+}
+_fmadm () {
+	# undefined
+	builtin autoload -XUz
+}
+_fmt () {
+	# undefined
+	builtin autoload -XUz
+}
+_fold () {
+	# undefined
+	builtin autoload -XUz
+}
+_fortune () {
+	# undefined
+	builtin autoload -XUz
+}
+_free () {
+	# undefined
+	builtin autoload -XUz
+}
+_freebsd-update () {
+	# undefined
+	builtin autoload -XUz
+}
+_fs_usage () {
+	# undefined
+	builtin autoload -XUz
+}
+_fsh () {
+	# undefined
+	builtin autoload -XUz
+}
+_fstat () {
+	# undefined
+	builtin autoload -XUz
+}
+_functions () {
+	# undefined
+	builtin autoload -XUz
+}
+_fuse_arguments () {
+	# undefined
+	builtin autoload -XUz
+}
+_fuse_values () {
+	# undefined
+	builtin autoload -XUz
+}
+_fuser () {
+	# undefined
+	builtin autoload -XUz
+}
+_fusermount () {
+	# undefined
+	builtin autoload -XUz
+}
+_fw_update () {
+	# undefined
+	builtin autoload -XUz
+}
+_fzf_compgen_dir () {
+	command find -L "$1" -name .git -prune -o -name .hg -prune -o -name .svn -prune -o -type d -a -not -path "$1" -print 2> /dev/null | sed 's@^\./@@'
+}
+_fzf_compgen_path () {
+	echo "$1"
+	command find -L "$1" -name .git -prune -o -name .hg -prune -o -name .svn -prune -o \( -type d -o -type f -o -type l \) -a -not -path "$1" -print 2> /dev/null | sed 's@^\./@@'
+}
+_fzf_complete () {
+	setopt localoptions ksh_arrays
+	local args rest str_arg i sep
+	args=("$@") 
+	sep= 
+	for i in {0..${#args[@]}}
+	do
+		if [[ "${args[$i]-}" = -- ]]
+		then
+			sep=$i 
+			break
+		fi
+	done
+	if [[ -n "$sep" ]]
+	then
+		str_arg= 
+		rest=("${args[@]:$((sep + 1)):${#args[@]}}") 
+		args=("${args[@]:0:$sep}") 
+	else
+		str_arg=$1 
+		args=() 
+		shift
+		rest=("$@") 
+	fi
+	local fifo lbuf cmd matches post
+	fifo="${TMPDIR:-/tmp}/fzf-complete-fifo-$$" 
+	lbuf=${rest[0]} 
+	cmd=$(__fzf_extract_command "$lbuf") 
+	post="${funcstack[1]}_post" 
+	type $post > /dev/null 2>&1 || post=cat 
+	_fzf_feed_fifo "$fifo"
+	matches=$(FZF_DEFAULT_OPTS="--height ${FZF_TMUX_HEIGHT:-40%} --reverse --bind=ctrl-z:ignore ${FZF_DEFAULT_OPTS-} ${FZF_COMPLETION_OPTS-} $str_arg" __fzf_comprun "$cmd" "${args[@]}" -q "${(Q)prefix}" < "$fifo" | $post | tr '\n' ' ') 
+	if [ -n "$matches" ]
+	then
+		LBUFFER="$lbuf$matches" 
+	fi
+	command rm -f "$fifo"
+}
+_fzf_complete_export () {
+	_fzf_complete -m -- "$@" < <(
+    declare -xp | sed 's/=.*//' | sed 's/.* //'
+  )
+}
+_fzf_complete_kill () {
+	_fzf_complete -m --header-lines=1 --preview 'echo {}' --preview-window down:3:wrap --min-height 15 -- "$@" < <(
+    command ps -eo user,pid,ppid,start,time,command 2> /dev/null ||
+      command ps -eo user,pid,ppid,time,args # For BusyBox
+  )
+}
+_fzf_complete_kill_post () {
+	awk '{print $2}'
+}
+_fzf_complete_ssh () {
+	local tokens=(${(z)1}) 
+	case ${tokens[-1]} in
+		(-i | -F | -E) _fzf_path_completion "$prefix" "$1" ;;
+		(*) local user= 
+			[[ $prefix =~ @ ]] && user="${prefix%%@*}@" 
+			_fzf_complete +m -- "$@" < <(__fzf_list_hosts | awk -v user="$user" '{print user $0}') ;;
+	esac
+}
+_fzf_complete_telnet () {
+	_fzf_complete +m -- "$@" < <(__fzf_list_hosts)
+}
+_fzf_complete_unalias () {
+	_fzf_complete +m -- "$@" < <(
+    alias | sed 's/=.*//'
+  )
+}
+_fzf_complete_unset () {
+	_fzf_complete -m -- "$@" < <(
+    declare -xp | sed 's/=.*//' | sed 's/.* //'
+  )
+}
+_fzf_dir_completion () {
+	__fzf_generic_path_completion "$1" "$2" _fzf_compgen_dir "" "/" ""
+}
+_fzf_feed_fifo () {
+	(
+		command rm -f "$1"
+		mkfifo "$1"
+		cat <&0 > "$1" &
+	)
+}
+_fzf_path_completion () {
+	__fzf_generic_path_completion "$1" "$2" _fzf_compgen_path "-m" "" " "
+}
+_gcc () {
+	# undefined
+	builtin autoload -XUz
+}
+_gcore () {
+	# undefined
+	builtin autoload -XUz
+}
+_gdb () {
+	# undefined
+	builtin autoload -XUz
+}
+_geany () {
+	# undefined
+	builtin autoload -XUz
+}
+_gem () {
+	# undefined
+	builtin autoload -XUz
+}
+_generic () {
+	# undefined
+	builtin autoload -XUz
+}
+_genisoimage () {
+	# undefined
+	builtin autoload -XUz
+}
+_getclip () {
+	# undefined
+	builtin autoload -XUz
+}
+_getconf () {
+	# undefined
+	builtin autoload -XUz
+}
+_getent () {
+	# undefined
+	builtin autoload -XUz
+}
+_getfacl () {
+	# undefined
+	builtin autoload -XUz
+}
+_getmail () {
+	# undefined
+	builtin autoload -XUz
+}
+_getopt () {
+	# undefined
+	builtin autoload -XUz
+}
+_ghostscript () {
+	# undefined
+	builtin autoload -XUz
+}
+_git () {
+	# undefined
+	builtin autoload -XUz
+}
+_git-buildpackage () {
+	# undefined
+	builtin autoload -XUz
+}
+_global () {
+	# undefined
+	builtin autoload -XUz
+}
+_global_tags () {
+	# undefined
+	builtin autoload -XUz
+}
+_globflags () {
+	# undefined
+	builtin autoload -XUz
+}
+_globqual_delims () {
+	# undefined
+	builtin autoload -XUz
+}
+_globquals () {
+	# undefined
+	builtin autoload -XUz
+}
+_gnome-gv () {
+	# undefined
+	builtin autoload -XUz
+}
+_gnu_generic () {
+	# undefined
+	builtin autoload -XUz
+}
+_gnupod () {
+	# undefined
+	builtin autoload -XUz
+}
+_gnutls () {
+	# undefined
+	builtin autoload -XUz
+}
+_go () {
+	# undefined
+	builtin autoload -XUz
+}
+_gpasswd () {
+	# undefined
+	builtin autoload -XUz
+}
+_gpg () {
+	# undefined
+	builtin autoload -XUz
+}
+_gphoto2 () {
+	# undefined
+	builtin autoload -XUz
+}
+_gprof () {
+	# undefined
+	builtin autoload -XUz
+}
+_gqview () {
+	# undefined
+	builtin autoload -XUz
+}
+_gradle () {
+	# undefined
+	builtin autoload -XUz
+}
+_graphicsmagick () {
+	# undefined
+	builtin autoload -XUz
+}
+_grep () {
+	# undefined
+	builtin autoload -XUz
+}
+_grep-excuses () {
+	# undefined
+	builtin autoload -XUz
+}
+_groff () {
+	# undefined
+	builtin autoload -XUz
+}
+_groups () {
+	# undefined
+	builtin autoload -XUz
+}
+_growisofs () {
+	# undefined
+	builtin autoload -XUz
+}
+_gsettings () {
+	# undefined
+	builtin autoload -XUz
+}
+_gstat () {
+	# undefined
+	builtin autoload -XUz
+}
+_guard () {
+	# undefined
+	builtin autoload -XUz
+}
+_guilt () {
+	# undefined
+	builtin autoload -XUz
+}
+_gv () {
+	# undefined
+	builtin autoload -XUz
+}
+_gzip () {
+	# undefined
+	builtin autoload -XUz
+}
+_hash () {
+	# undefined
+	builtin autoload -XUz
+}
+_have_glob_qual () {
+	local complete
+	[[ $2 = complete ]] && complete=")" 
+	[[ -z $compstate[quote] && ( ( $_comp_caller_options[bareglobqual] == on && $1 = (#b)(((*[^\\\$]|)(\\\\)#)\()([^\)\|\~]#)$complete && ${#match[1]} -gt 1 ) || ( $_comp_caller_options[extendedglob] == on && $1 = (#b)(((*[^\\\$]|)(\\\\)#)"(#q")([^\)]#)$complete ) ) ]]
+}
+_hdiutil () {
+	# undefined
+	builtin autoload -XUz
+}
+_head () {
+	# undefined
+	builtin autoload -XUz
+}
+_hexdump () {
+	# undefined
+	builtin autoload -XUz
+}
+_history () {
+	# undefined
+	builtin autoload -XUz
+}
+_history_complete_word () {
+	# undefined
+	builtin autoload -XUz
+}
+_history_modifiers () {
+	# undefined
+	builtin autoload -XUz
+}
+_host () {
+	# undefined
+	builtin autoload -XUz
+}
+_hostname () {
+	# undefined
+	builtin autoload -XUz
+}
+_hostnamectl () {
+	# undefined
+	builtin autoload -XUz
+}
+_hosts () {
+	# undefined
+	builtin autoload -XUz
+}
+_htop () {
+	# undefined
+	builtin autoload -XUz
+}
+_hwinfo () {
+	# undefined
+	builtin autoload -XUz
+}
+_iconv () {
+	# undefined
+	builtin autoload -XUz
+}
+_iconvconfig () {
+	# undefined
+	builtin autoload -XUz
+}
+_id () {
+	# undefined
+	builtin autoload -XUz
+}
+_ifconfig () {
+	# undefined
+	builtin autoload -XUz
+}
+_iftop () {
+	# undefined
+	builtin autoload -XUz
+}
+_ignored () {
+	[[ _matcher_num -gt 1 || $compstate[ignored] -eq 0 ]] && return 1
+	local comp
+	integer ind
+	if ! zstyle -a ":completion:${curcontext}:" completer comp
+	then
+		comp=("${(@)_completers[1,_completer_num-1]}") 
+		ind=${comp[(I)_ignored(|:*)]} 
+		(( ind )) && comp=("${(@)comp[ind,-1]}") 
+	fi
+	local _comp_no_ignore=yes tmp expl _completer _completer_num _matcher _c_matcher _matchers _matcher_num 
+	_completer_num=1 
+	for tmp in "$comp[@]"
+	do
+		if [[ "$tmp" = *:-* ]]
+		then
+			_completer="${${tmp%:*}[2,-1]//_/-}${tmp#*:}" 
+			tmp="${tmp%:*}" 
+		elif [[ $tmp = *:* ]]
+		then
+			_completer="${tmp#*:}" 
+			tmp="${tmp%:*}" 
+		else
+			_completer="${tmp[2,-1]//_/-}" 
+		fi
+		curcontext="${curcontext/:[^:]#:/:${_completer}:}" 
+		zstyle -a ":completion:${curcontext}:" matcher-list _matchers || _matchers=('') 
+		_matcher_num=1 
+		_matcher='' 
+		for _c_matcher in "$_matchers[@]"
+		do
+			if [[ "$_c_matcher" == +* ]]
+			then
+				_matcher="$_matcher $_c_matcher[2,-1]" 
+			else
+				_matcher="$_c_matcher" 
+			fi
+			if [[ "$tmp" != _ignored ]] && "$tmp"
+			then
+				if zstyle -s ":completion:${curcontext}:" single-ignored tmp && [[ $compstate[old_list] != shown && $compstate[nmatches] -eq 1 ]]
+				then
+					case "$tmp" in
+						(show) compstate[insert]='' compstate[list]='list force' tmp=''  ;;
+						(menu) compstate[insert]=menu 
+							_description original expl original
+							compadd "$expl[@]" -S '' - "$PREFIX$SUFFIX" ;;
+					esac
+				fi
+				return 0
+			fi
+			(( _matcher_num++ ))
+		done
+		(( _completer_num++ ))
+	done
+	return 1
+}
+_imagemagick () {
+	# undefined
+	builtin autoload -XUz
+}
+_in_vared () {
+	# undefined
+	builtin autoload -XUz
+}
+_inetadm () {
+	# undefined
+	builtin autoload -XUz
+}
+_init_d () {
+	# undefined
+	builtin autoload -XUz
+}
+_initctl () {
+	# undefined
+	builtin autoload -XUz
+}
+_install () {
+	# undefined
+	builtin autoload -XUz
+}
+_invoke-rc.d () {
+	# undefined
+	builtin autoload -XUz
+}
+_ionice () {
+	# undefined
+	builtin autoload -XUz
+}
+_iostat () {
+	# undefined
+	builtin autoload -XUz
+}
+_ip () {
+	# undefined
+	builtin autoload -XUz
+}
+_ipadm () {
+	# undefined
+	builtin autoload -XUz
+}
+_ipfw () {
+	# undefined
+	builtin autoload -XUz
+}
+_ipsec () {
+	# undefined
+	builtin autoload -XUz
+}
+_ipset () {
+	# undefined
+	builtin autoload -XUz
+}
+_iptables () {
+	# undefined
+	builtin autoload -XUz
+}
+_irssi () {
+	# undefined
+	builtin autoload -XUz
+}
+_ispell () {
+	# undefined
+	builtin autoload -XUz
+}
+_iwconfig () {
+	# undefined
+	builtin autoload -XUz
+}
+_jail () {
+	# undefined
+	builtin autoload -XUz
+}
+_jails () {
+	# undefined
+	builtin autoload -XUz
+}
+_java () {
+	# undefined
+	builtin autoload -XUz
+}
+_java_class () {
+	# undefined
+	builtin autoload -XUz
+}
+_jexec () {
+	# undefined
+	builtin autoload -XUz
+}
+_jls () {
+	# undefined
+	builtin autoload -XUz
+}
+_jobs () {
+	local expl disp jobs job jids pfx='%' desc how expls sep 
+	if [[ "$1" = -t ]]
+	then
+		zstyle -T ":completion:${curcontext}:jobs" prefix-needed && [[ "$PREFIX" != %* && compstate[nmatches] -ne 0 ]] && return 1
+		shift
+	fi
+	zstyle -t ":completion:${curcontext}:jobs" prefix-hidden && pfx='' 
+	zstyle -T ":completion:${curcontext}:jobs" verbose && desc=yes 
+	if [[ "$1" = -r ]]
+	then
+		jids=("${(@k)jobstates[(R)running*]}") 
+		shift
+		expls='running job' 
+	elif [[ "$1" = -s ]]
+	then
+		jids=("${(@k)jobstates[(R)suspended*]}") 
+		shift
+		expls='suspended job' 
+	else
+		[[ "$1" = - ]] && shift
+		jids=("${(@k)jobtexts}") 
+		expls=job 
+	fi
+	if [[ -n "$desc" ]]
+	then
+		disp=() 
+		zstyle -s ":completion:${curcontext}:jobs" list-separator sep || sep=-- 
+		for job in "$jids[@]"
+		do
+			[[ -n "$desc" ]] && disp=("$disp[@]" "${pfx}${(r:2:: :)job} $sep ${(r:COLUMNS-8:: :)jobtexts[$job]}") 
+		done
+	fi
+	zstyle -s ":completion:${curcontext}:jobs" numbers how
+	if [[ "$how" = (yes|true|on|1) ]]
+	then
+		jobs=("$jids[@]") 
+	else
+		local texts i text str tmp num max=0 
+		texts=("$jobtexts[@]") 
+		jobs=() 
+		for i in "$jids[@]"
+		do
+			text="$jobtexts[$i]" 
+			str="${text%% *}" 
+			if [[ "$text" = *\ * ]]
+			then
+				text="${text#* }" 
+			else
+				text="" 
+			fi
+			tmp=("${(@M)texts:#${str}*}") 
+			num=1 
+			while [[ -n "$text" && $#tmp -ge 2 ]]
+			do
+				str="${str} ${text%% *}" 
+				if [[ "$text" = *\ * ]]
+				then
+					text="${text#* }" 
+				else
+					text="" 
+				fi
+				tmp=("${(@M)texts:#${str}*}") 
+				(( num++ ))
+			done
+			[[ num -gt max ]] && max="$num" 
+			jobs=("$jobs[@]" "$str") 
+		done
+		if [[ "$how" = [0-9]## && max -gt how ]]
+		then
+			jobs=("$jids[@]") 
+		else
+			[[ -z "$pfx" && -n "$desc" ]] && disp=("${(@)disp#%}") 
+		fi
+	fi
+	if [[ -n "$desc" ]]
+	then
+		_wanted jobs expl "$expls" compadd "$@" -ld disp - "%$^jobs[@]"
+	else
+		_wanted jobs expl "$expls" compadd "$@" - "%$^jobs[@]"
+	fi
+}
+_jobs_bg () {
+	# undefined
+	builtin autoload -XUz
+}
+_jobs_builtin () {
+	# undefined
+	builtin autoload -XUz
+}
+_jobs_fg () {
+	# undefined
+	builtin autoload -XUz
+}
+_joe () {
+	# undefined
+	builtin autoload -XUz
+}
+_join () {
+	# undefined
+	builtin autoload -XUz
+}
+_jot () {
+	# undefined
+	builtin autoload -XUz
+}
+_journalctl () {
+	# undefined
+	builtin autoload -XUz
+}
+_jq () {
+	# undefined
+	builtin autoload -XUz
+}
+_kdeconnect () {
+	# undefined
+	builtin autoload -XUz
+}
+_kdump () {
+	# undefined
+	builtin autoload -XUz
+}
+_kernel-install () {
+	# undefined
+	builtin autoload -XUz
+}
+_kfmclient () {
+	# undefined
+	builtin autoload -XUz
+}
+_kill () {
+	# undefined
+	builtin autoload -XUz
+}
+_killall () {
+	# undefined
+	builtin autoload -XUz
+}
+_kld () {
+	# undefined
+	builtin autoload -XUz
+}
+_knock () {
+	# undefined
+	builtin autoload -XUz
+}
+_kpartx () {
+	# undefined
+	builtin autoload -XUz
+}
+_ktrace () {
+	# undefined
+	builtin autoload -XUz
+}
+_ktrace_points () {
+	# undefined
+	builtin autoload -XUz
+}
+_kvno () {
+	# undefined
+	builtin autoload -XUz
+}
+_last () {
+	# undefined
+	builtin autoload -XUz
+}
+_ld_debug () {
+	# undefined
+	builtin autoload -XUz
+}
+_ldap () {
+	# undefined
+	builtin autoload -XUz
+}
+_ldconfig () {
+	# undefined
+	builtin autoload -XUz
+}
+_ldd () {
+	# undefined
+	builtin autoload -XUz
+}
+_less () {
+	# undefined
+	builtin autoload -XUz
+}
+_lha () {
+	# undefined
+	builtin autoload -XUz
+}
+_libvirt () {
+	# undefined
+	builtin autoload -XUz
+}
+_lighttpd () {
+	# undefined
+	builtin autoload -XUz
+}
+_limit () {
+	# undefined
+	builtin autoload -XUz
+}
+_limits () {
+	# undefined
+	builtin autoload -XUz
+}
+_links () {
+	# undefined
+	builtin autoload -XUz
+}
+_lintian () {
+	# undefined
+	builtin autoload -XUz
+}
+_list () {
+	# undefined
+	builtin autoload -XUz
+}
+_list_files () {
+	local stat f elt what dir
+	local -a stylevals
+	integer ok
+	listfiles=() 
+	listopts=() 
+	zstyle -a ":completion:${curcontext}:" file-list stylevals || return 1
+	case $WIDGETSTYLE in
+		(*complete*) what=insert  ;;
+		(*) what=list  ;;
+	esac
+	for elt in $stylevals
+	do
+		case $elt in
+			(*($what|all|true|1|yes)*=<->) (( ${(P)#1} <= ${elt##*=} )) && (( ok = 1 ))
+				break ;;
+			([^=]#($what|all|true|1|yes)[^=]#) (( ok = 1 ))
+				break ;;
+		esac
+	done
+	(( ok )) || return 1
+	zmodload -F zsh/stat b:zstat 2> /dev/null || return 1
+	dir=${2:+$2/} 
+	dir=${(Q)dir} 
+	for f in ${(PQ)1}
+	do
+		if [[ ! -e "$dir$f" ]]
+		then
+			listfiles+=("$dir$f") 
+			continue
+		fi
+		zstat -s -H stat -F "%b %e %H:%M" - "$dir$f" > /dev/null 2>&1
+		listfiles+=("$stat[mode] ${(l:3:)stat[nlink]} ${(r:8:)stat[uid]}  ${(r:8:)stat[gid]} ${(l:8:)stat[size]} $stat[mtime] $f") 
+	done
+	(( ${#listfiles} )) && listopts=(-d listfiles -l -o match) 
+	return 0
+}
+_lldb () {
+	# undefined
+	builtin autoload -XUz
+}
+_ln () {
+	# undefined
+	builtin autoload -XUz
+}
+_loadkeys () {
+	# undefined
+	builtin autoload -XUz
+}
+_locale () {
+	# undefined
+	builtin autoload -XUz
+}
+_localectl () {
+	# undefined
+	builtin autoload -XUz
+}
+_localedef () {
+	# undefined
+	builtin autoload -XUz
+}
+_locales () {
+	# undefined
+	builtin autoload -XUz
+}
+_locate () {
+	# undefined
+	builtin autoload -XUz
+}
+_logger () {
+	# undefined
+	builtin autoload -XUz
+}
+_logical_volumes () {
+	# undefined
+	builtin autoload -XUz
+}
+_login_classes () {
+	# undefined
+	builtin autoload -XUz
+}
+_loginctl () {
+	# undefined
+	builtin autoload -XUz
+}
+_look () {
+	# undefined
+	builtin autoload -XUz
+}
+_losetup () {
+	# undefined
+	builtin autoload -XUz
+}
+_lp () {
+	# undefined
+	builtin autoload -XUz
+}
+_ls () {
+	# undefined
+	builtin autoload -XUz
+}
+_lsattr () {
+	# undefined
+	builtin autoload -XUz
+}
+_lsblk () {
+	# undefined
+	builtin autoload -XUz
+}
+_lscfg () {
+	# undefined
+	builtin autoload -XUz
+}
+_lsdev () {
+	# undefined
+	builtin autoload -XUz
+}
+_lslv () {
+	# undefined
+	builtin autoload -XUz
+}
+_lsns () {
+	# undefined
+	builtin autoload -XUz
+}
+_lsof () {
+	# undefined
+	builtin autoload -XUz
+}
+_lspv () {
+	# undefined
+	builtin autoload -XUz
+}
+_lsusb () {
+	# undefined
+	builtin autoload -XUz
+}
+_lsvg () {
+	# undefined
+	builtin autoload -XUz
+}
+_ltrace () {
+	# undefined
+	builtin autoload -XUz
+}
+_lua () {
+	# undefined
+	builtin autoload -XUz
+}
+_luarocks () {
+	# undefined
+	builtin autoload -XUz
+}
+_lynx () {
+	# undefined
+	builtin autoload -XUz
+}
+_lz4 () {
+	# undefined
+	builtin autoload -XUz
+}
+_lzop () {
+	# undefined
+	builtin autoload -XUz
+}
+_mac_applications () {
+	# undefined
+	builtin autoload -XUz
+}
+_mac_files_for_application () {
+	# undefined
+	builtin autoload -XUz
+}
+_madison () {
+	# undefined
+	builtin autoload -XUz
+}
+_mail () {
+	# undefined
+	builtin autoload -XUz
+}
+_mailboxes () {
+	# undefined
+	builtin autoload -XUz
+}
+_main_complete () {
+	local IFS=$' \t\n\0' 
+	eval "$_comp_setup"
+	local func funcs ret=1 tmp _compskip format nm call match min max i num _completers _completer _completer_num curtag _comp_force_list _matchers _matcher _c_matcher _matcher_num _comp_tags _comp_mesg mesg str context state state_descr line opt_args val_args curcontext="$curcontext" _last_nmatches=-1 _last_menu_style _def_menu_style _menu_style sel _tags_level=0 _saved_exact="${compstate[exact]}" _saved_lastprompt="${compstate[last_prompt]}" _saved_list="${compstate[list]}" _saved_insert="${compstate[insert]}" _saved_colors="$ZLS_COLORS" _saved_colors_set=${+ZLS_COLORS} _ambiguous_color='' 
+	local _comp_priv_prefix
+	unset _comp_priv_prefix
+	local -a precommands
+	local -ar builtin_precommands=(- builtin eval exec nocorrect noglob time) 
+	typeset -U _lastdescr _comp_ignore _comp_colors
+	{
+		[[ -z "$curcontext" ]] && curcontext=::: 
+		zstyle -s ":completion:${curcontext}:" insert-tab tmp || tmp=yes 
+		if [[ ( "$tmp" = *pending(|[[:blank:]]*) && PENDING -gt 0 ) || ( "$tmp" = *pending=(#b)([0-9]##)(|[[:blank:]]*) && PENDING -ge $match[1] ) ]]
+		then
+			compstate[insert]=tab 
+			return 0
+		fi
+		if [[ "$compstate[insert]" = tab* ]]
+		then
+			if [[ "$tmp" = (|*[[:blank:]])(yes|true|on|1)(|[[:blank:]]*) ]]
+			then
+				if [[ "$curcontext" != :* || -z "$compstate[vared]" ]] || zstyle -t ":completion:vared${curcontext}:" insert-tab
+				then
+					return 0
+				fi
+			fi
+			compstate[insert]="${compstate[insert]//tab /}" 
+		fi
+		if [[ "$compstate[pattern_match]" = "*" && "$_lastcomp[unambiguous]" = "$PREFIX" && -n "$_lastcomp[unambiguous_cursor]" ]]
+		then
+			integer upos="$_lastcomp[unambiguous_cursor]" 
+			SUFFIX="$PREFIX[upos,-1]$SUFFIX" 
+			PREFIX="$PREFIX[1,upos-1]" 
+		fi
+		if [[ -z "$compstate[quote]" ]]
+		then
+			if [[ -o equals ]] && compset -P 1 '='
+			then
+				compstate[context]=equal 
+			elif [[ "$PREFIX" != */* && "$PREFIX[1]" = '~' ]]
+			then
+				if [[ "$PREFIX" = '~['[^\]]# ]]
+				then
+					compset -p 2
+					compset -S '\]*'
+					compstate[context]=subscript 
+					[[ -n $_comps[-subscript-] ]] && $_comps[-subscript-] && return
+				else
+					compset -p 1
+					compstate[context]=tilde 
+				fi
+			fi
+		fi
+		_setup default
+		_def_menu_style=("$_last_menu_style[@]") 
+		_last_menu_style=() 
+		if zstyle -s ":completion:${curcontext}:default" list-prompt tmp
+		then
+			LISTPROMPT="$tmp" 
+			zmodload -i zsh/complist
+		fi
+		if zstyle -s ":completion:${curcontext}:default" select-prompt tmp
+		then
+			MENUPROMPT="$tmp" 
+			zmodload -i zsh/complist
+		fi
+		if zstyle -s ":completion:${curcontext}:default" select-scroll tmp
+		then
+			MENUSCROLL="$tmp" 
+			zmodload -i zsh/complist
+		fi
+		if (( $# ))
+		then
+			if [[ "$1" = - ]]
+			then
+				if [[ $# -lt 3 ]]
+				then
+					_completers=() 
+				else
+					_completers=("$2") 
+					call=yes 
+				fi
+			else
+				_completers=("$@") 
+			fi
+		else
+			zstyle -a ":completion:${curcontext}:" completer _completers || _completers=(_complete _ignored) 
+		fi
+		_completer_num=1 
+		integer SECONDS=0 
+		TRAPINT () {
+			zle -M "Killed by signal in ${funcstack[2]} after ${SECONDS}s"
+			zle -R
+			return 130
+		}
+		TRAPQUIT () {
+			zle -M "Killed by signal in ${funcstack[2]} after ${SECONDS}s"
+			zle -R
+			return 131
+		}
+		funcs=("$compprefuncs[@]") 
+		compprefuncs=() 
+		for func in "$funcs[@]"
+		do
+			"$func"
+		done
+		for tmp in "$_completers[@]"
+		do
+			if [[ -n "$call" ]]
+			then
+				_completer="${tmp}" 
+			elif [[ "$tmp" = *:-* ]]
+			then
+				_completer="${${tmp%:*}[2,-1]//_/-}${tmp#*:}" 
+				tmp="${tmp%:*}" 
+			elif [[ $tmp = *:* ]]
+			then
+				_completer="${tmp#*:}" 
+				tmp="${tmp%:*}" 
+			else
+				_completer="${tmp[2,-1]//_/-}" 
+			fi
+			curcontext="${curcontext/:[^:]#:/:${_completer}:}" 
+			zstyle -t ":completion:${curcontext}:" show-completer && zle -R "Trying completion for :completion:${curcontext}"
+			zstyle -a ":completion:${curcontext}:" matcher-list _matchers || _matchers=('') 
+			_matcher_num=1 
+			_matcher='' 
+			for _c_matcher in "$_matchers[@]"
+			do
+				if [[ "$_c_matcher" == +* ]]
+				then
+					_matcher="$_matcher $_c_matcher[2,-1]" 
+				else
+					_matcher="$_c_matcher" 
+				fi
+				_comp_mesg= 
+				if [[ -n "$call" ]]
+				then
+					if "${(@)argv[3,-1]}"
+					then
+						ret=0 
+						break 2
+					fi
+				elif "$tmp"
+				then
+					ret=0 
+					break 2
+				fi
+				(( _matcher_num++ ))
+			done
+			[[ -n "$_comp_mesg" ]] && break
+			(( _completer_num++ ))
+		done
+		curcontext="${curcontext/:[^:]#:/::}" 
+		if [[ $compstate[old_list] = keep ]]
+		then
+			nm=$_lastcomp[nmatches] 
+		else
+			nm=$compstate[nmatches] 
+		fi
+		if [[ $compstate[old_list] = keep || nm -gt 1 ]]
+		then
+			[[ _last_nmatches -ge 0 && _last_nmatches -ne nm ]] && _menu_style=("$_last_menu_style[@]" "$_menu_style[@]") 
+			tmp=$(( compstate[list_lines] + BUFFERLINES + 1 )) 
+			_menu_style=("$_menu_style[@]" "$_def_menu_style[@]") 
+			if [[ "$compstate[list]" = *list(| *) && tmp -gt LINES && ( -n "$_menu_style[(r)select=long-list]" || -n "$_menu_style[(r)(yes|true|on|1)=long-list]" ) ]]
+			then
+				compstate[insert]=menu 
+			elif [[ "$compstate[insert]" = "$_saved_insert" ]]
+			then
+				if [[ -n "$compstate[insert]" && -n "$_menu_style[(r)(yes|true|1|on)=long]" && tmp -gt LINES ]]
+				then
+					compstate[insert]=menu 
+				else
+					sel=("${(@M)_menu_style:#(yes|true|1|on)*}") 
+					if (( $#sel ))
+					then
+						min=9999999 
+						for i in "$sel[@]"
+						do
+							if [[ "$i" = *\=[0-9]* ]]
+							then
+								num="${i#*\=}" 
+								[[ num -lt 0 ]] && num=0 
+							elif [[ "$i" != *\=* ]]
+							then
+								num=0 
+							else
+								num=9999999 
+							fi
+							[[ num -lt min ]] && min="$num" 
+							(( min )) || break
+						done
+					fi
+					sel=("${(@M)_menu_style:#(no|false|0|off)*}") 
+					if (( $#sel ))
+					then
+						max=9999999 
+						for i in "$sel[@]"
+						do
+							if [[ "$i" = *\=[0-9]* ]]
+							then
+								num="${i#*\=}" 
+								[[ num -lt 0 ]] && num=0 
+							elif [[ "$i" != *\=* ]]
+							then
+								num=0 
+							else
+								num=9999999 
+							fi
+							[[ num -lt max ]] && max="$num" 
+							(( max )) || break
+						done
+					fi
+					if [[ ( -n "$min" && nm -ge min && ( -z "$max" || nm -lt max ) ) || ( -n "$_menu_style[(r)auto*]" && "$compstate[insert]" = automenu ) ]]
+					then
+						compstate[insert]=menu 
+					elif [[ -n "$max" && nm -ge max ]]
+					then
+						compstate[insert]=unambiguous 
+					elif [[ -n "$_menu_style[(r)auto*]" && "$compstate[insert]" != automenu ]]
+					then
+						compstate[insert]=automenu-unambiguous 
+					fi
+				fi
+			fi
+			if [[ "$compstate[insert]" = *menu* ]]
+			then
+				[[ "$MENUSELECT" = 00 ]] && MENUSELECT=0 
+				if [[ -n "$_menu_style[(r)no-select*]" ]]
+				then
+					unset MENUSELECT
+				elif [[ -n "$_menu_style[(r)select=long*]" ]]
+				then
+					if [[ tmp -gt LINES ]]
+					then
+						zmodload -i zsh/complist
+						MENUSELECT=00 
+					fi
+				fi
+				if [[ "$MENUSELECT" != 00 ]]
+				then
+					sel=("${(@M)_menu_style:#select*}") 
+					if (( $#sel ))
+					then
+						min=9999999 
+						for i in "$sel[@]"
+						do
+							if [[ "$i" = *\=[0-9]* ]]
+							then
+								num="${i#*\=}" 
+								[[ num -lt 0 ]] && num=0 
+							elif [[ "$i" != *\=* ]]
+							then
+								num=0 
+							else
+								num=9999999 
+							fi
+							[[ num -lt min ]] && min="$num" 
+							(( min )) || break
+						done
+						zmodload -i zsh/complist
+						MENUSELECT="$min" 
+					else
+						unset MENUSELECT
+					fi
+				fi
+				if [[ -n "$MENUSELECT" ]]
+				then
+					if [[ -n "$_menu_style[(r)interactive*]" ]]
+					then
+						MENUMODE=interactive 
+					elif [[ -n "$_menu_style[(r)search*]" ]]
+					then
+						if [[ -n "$_menu_style[(r)*backward*]" ]]
+						then
+							MENUMODE=search-backward 
+						else
+							MENUMODE=search-forward 
+						fi
+					else
+						unset MENUMODE
+					fi
+				fi
+			fi
+		elif [[ nm -lt 1 && -n "$_comp_mesg" ]]
+		then
+			compstate[insert]='' 
+			compstate[list]='list force' 
+		elif [[ nm -eq 0 && -z "$_comp_mesg" && $#_lastdescr -ne 0 && $compstate[old_list] != keep ]] && zstyle -s ":completion:${curcontext}:warnings" format format
+		then
+			compstate[list]='list force' 
+			compstate[insert]='' 
+			tmp=("\`${(@)^_lastdescr:#}'") 
+			case $#tmp in
+				(1) str="$tmp[1]"  ;;
+				(2) str="$tmp[1] or $tmp[2]"  ;;
+				(*) str="${(j:, :)tmp[1,-2]}, or $tmp[-1]"  ;;
+			esac
+			_setup warnings
+			zformat -f mesg "$format" "d:$str" "D:${(F)${(@)_lastdescr:#}}"
+			compadd -x "$mesg"
+		fi
+		if [[ -n "$_ambiguous_color" ]]
+		then
+			local toquote='[=\(\)\|~^?*[\]#<>]' 
+			local prefix=${${compstate[unambiguous]}[1,${compstate[unambiguous_cursor]}-1]} 
+			[[ -n $prefix ]] && _comp_colors+=("=(#i)${prefix[1,-2]//?/(}${prefix[1,-2]//(#m)?/${MATCH/$~toquote/\\$MATCH}|)}${prefix[-1]//(#m)$~toquote/\\$MATCH}(#b)(?|)*==$_ambiguous_color") 
+		fi
+		[[ "$_comp_force_list" = always || ( "$_comp_force_list" = ?* && nm -ge _comp_force_list ) ]] && compstate[list]="${compstate[list]//messages} force" 
+	} always {
+		if [[ "$compstate[old_list]" = keep ]]
+		then
+			if [[ $_saved_colors_set = 1 ]]
+			then
+				ZLS_COLORS="$_saved_colors" 
+			else
+				unset ZLS_COLORS
+			fi
+		elif (( $#_comp_colors ))
+		then
+			ZLS_COLORS="${(j.:.)_comp_colors}" 
+		else
+			unset ZLS_COLORS
+		fi
+	}
+	funcs=("$comppostfuncs[@]") 
+	comppostfuncs=() 
+	for func in "$funcs[@]"
+	do
+		"$func"
+	done
+	_lastcomp=("${(@kv)compstate}") 
+	_lastcomp[nmatches]=$nm 
+	_lastcomp[completer]="$_completer" 
+	_lastcomp[prefix]="$PREFIX" 
+	_lastcomp[suffix]="$SUFFIX" 
+	_lastcomp[iprefix]="$IPREFIX" 
+	_lastcomp[isuffix]="$ISUFFIX" 
+	_lastcomp[qiprefix]="$QIPREFIX" 
+	_lastcomp[qisuffix]="$QISUFFIX" 
+	_lastcomp[tags]="$_comp_tags" 
+	return ret
+}
+_make () {
+	# undefined
+	builtin autoload -XUz
+}
+_make-kpkg () {
+	# undefined
+	builtin autoload -XUz
+}
+_man () {
+	# undefined
+	builtin autoload -XUz
+}
+_mat () {
+	# undefined
+	builtin autoload -XUz
+}
+_mat2 () {
+	# undefined
+	builtin autoload -XUz
+}
+_match () {
+	# undefined
+	builtin autoload -XUz
+}
+_math () {
+	# undefined
+	builtin autoload -XUz
+}
+_math_params () {
+	# undefined
+	builtin autoload -XUz
+}
+_matlab () {
+	# undefined
+	builtin autoload -XUz
+}
+_md5sum () {
+	# undefined
+	builtin autoload -XUz
+}
+_mdadm () {
+	# undefined
+	builtin autoload -XUz
+}
+_mdfind () {
+	# undefined
+	builtin autoload -XUz
+}
+_mdls () {
+	# undefined
+	builtin autoload -XUz
+}
+_mdutil () {
+	# undefined
+	builtin autoload -XUz
+}
+_members () {
+	# undefined
+	builtin autoload -XUz
+}
+_mencal () {
+	# undefined
+	builtin autoload -XUz
+}
+_menu () {
+	# undefined
+	builtin autoload -XUz
+}
+_mere () {
+	# undefined
+	builtin autoload -XUz
+}
+_mergechanges () {
+	# undefined
+	builtin autoload -XUz
+}
+_message () {
+	local format raw gopt
+	if [[ "$1" = -e ]]
+	then
+		local expl ret=1 tag 
+		_comp_mesg=yes 
+		if (( $# > 2 ))
+		then
+			tag="$2" 
+			shift
+		else
+			tag="$curtag" 
+		fi
+		_tags "$tag" && while _next_label "$tag" expl "$2"
+		do
+			compadd ${expl:/-X/-x}
+			ret=0 
+		done
+		(( ! $compstate[nmatches] )) && [[ $compstate[insert] = *unambiguous* ]] && compstate[insert]= 
+		return ret
+	fi
+	gopt=() 
+	zparseopts -D -a gopt 1 2 V J
+	_tags messages || return 1
+	if [[ "$1" = -r ]]
+	then
+		raw=yes 
+		shift
+		format="$1" 
+	else
+		zstyle -s ":completion:${curcontext}:messages" format format || zstyle -s ":completion:${curcontext}:descriptions" format format
+	fi
+	if [[ -n "$format$raw" ]]
+	then
+		[[ -z "$raw" ]] && zformat -F format "$format" "d:$1" "${(@)argv[2,-1]}"
+		builtin compadd "$gopt[@]" -x "$format"
+		_comp_mesg=yes 
+	fi
+}
+_mh () {
+	# undefined
+	builtin autoload -XUz
+}
+_mii-tool () {
+	# undefined
+	builtin autoload -XUz
+}
+_mime_types () {
+	# undefined
+	builtin autoload -XUz
+}
+_mixerctl () {
+	# undefined
+	builtin autoload -XUz
+}
+_mkdir () {
+	# undefined
+	builtin autoload -XUz
+}
+_mkfifo () {
+	# undefined
+	builtin autoload -XUz
+}
+_mknod () {
+	# undefined
+	builtin autoload -XUz
+}
+_mkshortcut () {
+	# undefined
+	builtin autoload -XUz
+}
+_mktemp () {
+	# undefined
+	builtin autoload -XUz
+}
+_mkzsh () {
+	# undefined
+	builtin autoload -XUz
+}
+_module () {
+	# undefined
+	builtin autoload -XUz
+}
+_module-assistant () {
+	# undefined
+	builtin autoload -XUz
+}
+_module_math_func () {
+	# undefined
+	builtin autoload -XUz
+}
+_modutils () {
+	# undefined
+	builtin autoload -XUz
+}
+_mondo () {
+	# undefined
+	builtin autoload -XUz
+}
+_monotone () {
+	# undefined
+	builtin autoload -XUz
+}
+_moosic () {
+	# undefined
+	builtin autoload -XUz
+}
+_mosh () {
+	# undefined
+	builtin autoload -XUz
+}
+_most_recent_file () {
+	# undefined
+	builtin autoload -XUz
+}
+_mount () {
+	# undefined
+	builtin autoload -XUz
+}
+_mozilla () {
+	# undefined
+	builtin autoload -XUz
+}
+_mpc () {
+	# undefined
+	builtin autoload -XUz
+}
+_mplayer () {
+	# undefined
+	builtin autoload -XUz
+}
+_mt () {
+	# undefined
+	builtin autoload -XUz
+}
+_mtools () {
+	# undefined
+	builtin autoload -XUz
+}
+_mtr () {
+	# undefined
+	builtin autoload -XUz
+}
+_multi_parts () {
+	# undefined
+	builtin autoload -XUz
+}
+_mupdf () {
+	# undefined
+	builtin autoload -XUz
+}
+_mutt () {
+	# undefined
+	builtin autoload -XUz
+}
+_mv () {
+	# undefined
+	builtin autoload -XUz
+}
+_my_accounts () {
+	# undefined
+	builtin autoload -XUz
+}
+_myrepos () {
+	# undefined
+	builtin autoload -XUz
+}
+_mysql_utils () {
+	# undefined
+	builtin autoload -XUz
+}
+_mysqldiff () {
+	# undefined
+	builtin autoload -XUz
+}
+_nautilus () {
+	# undefined
+	builtin autoload -XUz
+}
+_nbsd_architectures () {
+	# undefined
+	builtin autoload -XUz
+}
+_ncftp () {
+	# undefined
+	builtin autoload -XUz
+}
+_nedit () {
+	# undefined
+	builtin autoload -XUz
+}
+_net_interfaces () {
+	# undefined
+	builtin autoload -XUz
+}
+_netcat () {
+	# undefined
+	builtin autoload -XUz
+}
+_netscape () {
+	# undefined
+	builtin autoload -XUz
+}
+_netstat () {
+	# undefined
+	builtin autoload -XUz
+}
+_networkctl () {
+	# undefined
+	builtin autoload -XUz
+}
+_networkmanager () {
+	# undefined
+	builtin autoload -XUz
+}
+_networksetup () {
+	# undefined
+	builtin autoload -XUz
+}
+_newsgroups () {
+	# undefined
+	builtin autoload -XUz
+}
+_next_label () {
+	local __gopt __descr __spec
+	__gopt=() 
+	zparseopts -D -a __gopt 1 2 V J x
+	if comptags -A "$1" curtag __spec
+	then
+		(( $#funcstack > _tags_level )) && _comp_tags="${_comp_tags% * }" 
+		_tags_level=$#funcstack 
+		_comp_tags="$_comp_tags $__spec " 
+		if [[ "$curtag" = *[^\\]:* ]]
+		then
+			zformat -f __descr "${curtag#*:}" "d:$3"
+			_description "$__gopt[@]" "${curtag%:*}" "$2" "$__descr"
+			curtag="${curtag%:*}" 
+			set -A $2 "${(P@)2}" "${(@)argv[4,-1]}"
+		else
+			_description "$__gopt[@]" "$curtag" "$2" "$3"
+			set -A $2 "${(@)argv[4,-1]}" "${(P@)2}"
+		fi
+		return 0
+	fi
+	return 1
+}
+_next_tags () {
+	# undefined
+	builtin autoload -XUz
+}
+_nginx () {
+	# undefined
+	builtin autoload -XUz
+}
+_ngrep () {
+	# undefined
+	builtin autoload -XUz
+}
+_nice () {
+	# undefined
+	builtin autoload -XUz
+}
+_nkf () {
+	# undefined
+	builtin autoload -XUz
+}
+_nl () {
+	# undefined
+	builtin autoload -XUz
+}
+_nm () {
+	# undefined
+	builtin autoload -XUz
+}
+_nmap () {
+	# undefined
+	builtin autoload -XUz
+}
+_normal () {
+	local _comp_command1 _comp_command2 _comp_command precommand
+	local -A opts
+	zparseopts -A opts -D - P p+:-=precommand s
+	(( $+opts[-s] )) || _compskip= 
+	(( $+opts[-P] )) && precommands=() 
+	(( $#precommand )) && precommands+=(${precommand#-p}) 
+	if [[ -o BANG_HIST && ( ( $words[CURRENT] = \!*: && -z $compstate[quote] ) || ( $words[CURRENT] = \"\!*: && $compstate[all_quotes] = \" ) ) ]]
+	then
+		PREFIX=${PREFIX//\\!/!} 
+		compset -P '*:'
+		_history_modifiers h
+		return
+	fi
+	if [[ CURRENT -eq 1 ]]
+	then
+		curcontext="${curcontext%:*:*}:-command-:" 
+		comp="$_comps[-command-]" 
+		[[ -n "$comp" ]] && eval "$comp" && return
+		return 1
+	fi
+	_set_command
+	_dispatch ${(k)opts[-s]} "$_comp_command" "$_comp_command1" "$_comp_command2" -default-
+}
+_nothing () {
+	# undefined
+	builtin autoload -XUz
+}
+_npm () {
+	# undefined
+	builtin autoload -XUz
+}
+_nsenter () {
+	# undefined
+	builtin autoload -XUz
+}
+_nslookup () {
+	# undefined
+	builtin autoload -XUz
+}
+_numbers () {
+	# undefined
+	builtin autoload -XUz
+}
+_numfmt () {
+	# undefined
+	builtin autoload -XUz
+}
+_nvram () {
+	# undefined
+	builtin autoload -XUz
+}
+_objdump () {
+	# undefined
+	builtin autoload -XUz
+}
+_object_classes () {
+	# undefined
+	builtin autoload -XUz
+}
+_object_files () {
+	# undefined
+	builtin autoload -XUz
+}
+_obsd_architectures () {
+	# undefined
+	builtin autoload -XUz
+}
+_od () {
+	# undefined
+	builtin autoload -XUz
+}
+_okular () {
+	# undefined
+	builtin autoload -XUz
+}
+_oldlist () {
+	# undefined
+	builtin autoload -XUz
+}
+_open () {
+	# undefined
+	builtin autoload -XUz
+}
+_openstack () {
+	# undefined
+	builtin autoload -XUz
+}
+_opkg () {
+	# undefined
+	builtin autoload -XUz
+}
+_options () {
+	# undefined
+	builtin autoload -XUz
+}
+_options_set () {
+	# undefined
+	builtin autoload -XUz
+}
+_options_unset () {
+	# undefined
+	builtin autoload -XUz
+}
+_opustools () {
+	# undefined
+	builtin autoload -XUz
+}
+_osascript () {
+	# undefined
+	builtin autoload -XUz
+}
+_osc () {
+	# undefined
+	builtin autoload -XUz
+}
+_other_accounts () {
+	# undefined
+	builtin autoload -XUz
+}
+_otool () {
+	# undefined
+	builtin autoload -XUz
+}
+_pack () {
+	# undefined
+	builtin autoload -XUz
+}
+_pandoc () {
+	# undefined
+	builtin autoload -XUz
+}
+_parameter () {
+	# undefined
+	builtin autoload -XUz
+}
+_parameters () {
+	if compset -P '*:'
+	then
+		_history_modifiers p
+		return
+	fi
+	local i pfilt
+	local -i nm=$compstate[nmatches] 
+	local -a expl pattern=(-g \*) normal described verbose faked fakes tmp 
+	zstyle -t ":completion:${curcontext}:parameters" prefix-needed && [[ $PREFIX != [_.]* ]] && pfilt='[^_.]' 
+	_description parameters expl parameter
+	zparseopts -D -K -E g:=pattern
+	if zstyle -t ":completion:${curcontext}:parameters" extra-verbose
+	then
+		described=("${(@M)${(@k)parameters[(R)$~pattern[2]~*(hideval|local|special)*]}:#$~pfilt*}") 
+		compadd "$@" "$expl[@]" -D described -a - described
+		if (( $#described ))
+		then
+			verbose=(${${${(f@)"$( typeset -m ${(@b)described} )"}/=/:}[@]//'\'/'\\'}) 
+			_describe -t parameters parameter verbose "$@" "$expl[@]"
+		fi
+		normal=("${(@M)${(@k)parameters[(R)$~pattern[2]~^(*(hideval|special)*)~*local*]}:#$~pfilt*}") 
+	else
+		normal=("${(@M)${(@k)parameters[(R)$~pattern[2]~*local*]}:#$~pfilt*}") 
+	fi
+	if zstyle -a ":completion:${curcontext}:" fake-parameters tmp
+	then
+		for i in "$tmp[@]"
+		do
+			if [[ "$i" = *:* ]]
+			then
+				faked=("$faked[@]" "$i") 
+			else
+				fakes=("$fakes[@]" "$i") 
+			fi
+		done
+	fi
+	compadd "$@" "$expl[@]" - "$normal[@]" "${(@)fakes:|described}" "${(@)${(@)${(@M)faked:#${~pattern[2]}}%%:*}:|described}"
+	(( compstate[nmatches] > nm ))
+}
+_paste () {
+	# undefined
+	builtin autoload -XUz
+}
+_patch () {
+	# undefined
+	builtin autoload -XUz
+}
+_patchutils () {
+	# undefined
+	builtin autoload -XUz
+}
+_path_commands () {
+	local need_desc expl ret=1 
+	if zstyle -t ":completion:${curcontext}:" extra-verbose
+	then
+		local update_policy first
+		if [[ $+_command_descriptions -eq 0 ]]
+		then
+			first=yes 
+			typeset -A -g _command_descriptions
+		fi
+		zstyle -s ":completion:${curcontext}:" cache-policy update_policy
+		[[ -z "$update_policy" ]] && zstyle ":completion:${curcontext}:" cache-policy _path_commands_caching_policy
+		if (
+				[[ -n $first ]] || _cache_invalid command-descriptions
+			) && ! _retrieve_cache command-descriptions
+		then
+			local line
+			for line in "${(f)$(_call_program command-descriptions _call_whatis -s 1 -r .\\\*\; _call_whatis -s 6 -r .\\\* 2>/dev/null)}"
+			do
+				[[ -n ${line:#(#b)([^ ]#) #\([^ ]#\)( #\[[^ ]#\]|)[ -]#(*)} ]] && continue
+				[[ -z $match[1] || -z $match[3] || -z ${${match[1]}:#*:*} ]] && continue
+				_command_descriptions[$match[1]]=$match[3] 
+			done
+			_store_cache command-descriptions _command_descriptions
+		fi
+		(( $#_command_descriptions )) && need_desc=yes 
+	fi
+	if [[ -n $need_desc ]]
+	then
+		typeset -a dcmds descs cmds matches
+		local desc cmd sep
+		compadd "$@" -O matches -k commands
+		for cmd in $matches
+		do
+			desc=$_command_descriptions[$cmd] 
+			if [[ -z $desc ]]
+			then
+				cmds+=$cmd 
+			else
+				dcmds+=$cmd 
+				descs+="$cmd:$desc" 
+			fi
+		done
+		zstyle -s ":completion:${curcontext}:" list-separator sep || sep=-- 
+		zformat -a descs " $sep " $descs
+		descs=("${(@r:COLUMNS-1:)descs}") 
+		_wanted commands expl 'external command' compadd "$@" -ld descs -a dcmds && ret=0 
+		_wanted commands expl 'external command' compadd "$@" -a cmds && ret=0 
+	else
+		_wanted commands expl 'external command' compadd "$@" -k commands && ret=0 
+	fi
+	if [[ -o path_dirs ]]
+	then
+		local -a path_dirs
+		if [[ $PREFIX$SUFFIX = */* ]]
+		then
+			path_dirs=(${path:#.}) 
+			_wanted commands expl 'external command' _path_files -W path_dirs -g '*(-*)' && ret=0 
+		else
+			path_dirs=(${^path}/*(/N:t)) 
+			(( ${#path_dirs} )) && _wanted path-dirs expl 'directory in path' compadd "$@" -S / -a path_dirs && ret=0 
+		fi
+	fi
+	return ret
+}
+_path_commands_caching_policy () {
+	local file
+	local -a oldp dbfiles
+	oldp=("$1"(Nmw+1)) 
+	(( $#oldp )) && return 0
+	dbfiles=(/usr/share/man/index.(bt|db|dir|pag)(N) /usr/man/index.(bt|db|dir|pag)(N) /var/cache/man/index.(bt|db|dir|pag)(N) /var/catman/index.(bt|db|dir|pag)(N) /usr/share/man/*/whatis(N)) 
+	for file in $dbfiles
+	do
+		[[ $file -nt $1 ]] && return 0
+	done
+	return 1
+}
+_path_files () {
+	local -a match mbegin mend
+	local splitchars
+	if zstyle -s ":completion:${curcontext}:" file-split-chars splitchars
+	then
+		compset -P "*[${(q)splitchars}]"
+	fi
+	if _have_glob_qual $PREFIX
+	then
+		local ret=1 
+		compset -p ${#match[1]}
+		compset -S '[^\)\|\~]#(|\))'
+		if [[ $_comp_caller_options[extendedglob] == on ]] && compset -P '\#'
+		then
+			_globflags && ret=0 
+		else
+			if [[ $_comp_caller_options[extendedglob] == on ]]
+			then
+				local -a flags
+				flags=('#:introduce glob flag') 
+				_describe -t globflags "glob flag" flags -Q -S '' && ret=0 
+			fi
+			_globquals && ret=0 
+		fi
+		return ret
+	fi
+	local linepath realpath donepath prepath testpath exppath skips skipped
+	local tmp1 tmp2 tmp3 tmp4 i orig eorig pre suf tpre tsuf opre osuf cpre
+	local pats haspats ignore pfx pfxsfx sopt gopt opt sdirs ignpar cfopt listsfx
+	local nm=$compstate[nmatches] menu matcher mopts sort mid accex fake 
+	local listfiles listopts tmpdisp origtmp1 Uopt
+	local accept_exact_dirs path_completion
+	integer npathcheck
+	local -a Mopts
+	typeset -U prepaths exppaths
+	exppaths=() 
+	zparseopts -a mopts 'P:=pfx' 'S:=pfxsfx' 'q=pfxsfx' 'r:=pfxsfx' 'R:=pfxsfx' 'W:=prepaths' 'F:=ignore' 'M+:=matcher' J+: V+: x+: X+: 1 2 o+: n 'f=tmp1' '/=tmp1' 'g+:-=tmp1'
+	sopt="-${(@j::M)${(@)tmp1#-}#?}" 
+	(( $tmp1[(I)-[/g]*] )) && haspats=yes 
+	(( $tmp1[(I)-g*] )) && gopt=yes 
+	if (( $tmp1[(I)-/] ))
+	then
+		pats="${(@)${(@M)tmp1:#-g*}#-g}" 
+		pats=('*(-/)' ${${(z):-x $pats}[2,-1]}) 
+	else
+		pats="${(@)${(@M)tmp1:#-g*}#-g}" 
+		pats=(${${(z):-x $pats}[2,-1]}) 
+	fi
+	pats=("${(@)pats:# #}") 
+	if (( $#pfx ))
+	then
+		compset -P "${(b)pfx[2]}" || pfxsfx=("$pfx[@]" "$pfxsfx[@]") 
+	fi
+	if (( $#prepaths ))
+	then
+		tmp1="${prepaths[2]}" 
+		if [[ "$tmp1[1]" = '(' ]]
+		then
+			prepaths=(${^=tmp1[2,-2]%/}/) 
+		elif [[ "$tmp1[1]" = '/' ]]
+		then
+			prepaths=("${tmp1%/}/") 
+		else
+			prepaths=(${(P)^tmp1%/}/) 
+			(( ! $#prepaths )) && prepaths=(${tmp1%/}/) 
+		fi
+		(( ! $#prepaths )) && prepaths=('') 
+	else
+		prepaths=('') 
+	fi
+	if (( $#ignore ))
+	then
+		if [[ "${ignore[2]}" = \(* ]]
+		then
+			ignore=(${=ignore[2][2,-2]}) 
+		else
+			ignore=(${(P)ignore[2]}) 
+		fi
+	fi
+	if [[ "$sopt" = -(f|) ]]
+	then
+		if [[ -z "$gopt" ]]
+		then
+			sopt='-f' 
+			pats=('*') 
+		else
+			unset sopt
+		fi
+	fi
+	if (( ! $mopts[(I)-[JVX]] ))
+	then
+		local expl
+		if [[ -z "$gopt" && "$sopt" = -/ ]]
+		then
+			_description directories expl directory
+		else
+			_description files expl file
+		fi
+		tmp1=$expl[(I)-M*] 
+		if (( tmp1 ))
+		then
+			if (( $#matcher ))
+			then
+				matcher[2]="$matcher[2] $expl[1+tmp1]" 
+			else
+				matcher=(-M "$expl[1+tmp1]") 
+			fi
+		fi
+		mopts=("$mopts[@]" "$expl[@]") 
+	fi
+	[[ -z "$_comp_no_ignore" && $#ignore -eq 0 && ( -z $gopt || "$pats" = \ #\*\ # ) && -n $FIGNORE ]] && ignore=("?*${^fignore[@]}") 
+	if (( $#ignore ))
+	then
+		_comp_ignore=("$_comp_ignore[@]" "$ignore[@]") 
+		(( $mopts[(I)-F] )) || mopts=("$mopts[@]" -F _comp_ignore) 
+	fi
+	if [[ $#matcher -eq 0 && -o nocaseglob ]]
+	then
+		matcher=(-M 'm:{a-zA-Z}={A-Za-z}') 
+	fi
+	if (( $#matcher ))
+	then
+		mopts=("$mopts[@]" "$matcher[@]") 
+	fi
+	if zstyle -s ":completion:${curcontext}:" file-sort tmp1
+	then
+		case "$tmp1" in
+			(*size*) sort=oL  ;;
+			(*links*) sort=ol  ;;
+			(*(time|date|modi)*) sort=om  ;;
+			(*access*) sort=oa  ;;
+			(*(inode|change)*) sort=oc  ;;
+			(*) sort=on  ;;
+		esac
+		[[ "$tmp1" = *rev* ]] && sort[1]=O 
+		[[ "$tmp1" = *follow* ]] && sort="-${sort}-" 
+		if [[ "$sort" = on ]]
+		then
+			sort= 
+		else
+			mopts=(-o nosort "${mopts[@]}") 
+			tmp2=() 
+			for tmp1 in "$pats[@]"
+			do
+				if _have_glob_qual "$tmp1" complete
+				then
+					tmp2+=("${match[1]}#q${sort})(${match[5]})") 
+				else
+					tmp2+=("${tmp1}(${sort})") 
+				fi
+			done
+			pats=("$tmp2[@]") 
+		fi
+	fi
+	if zstyle -t ":completion:${curcontext}:paths" squeeze-slashes
+	then
+		skips='((.|..|)/)##' 
+	else
+		skips='((.|..)/)##' 
+	fi
+	zstyle -s ":completion:${curcontext}:paths" special-dirs sdirs
+	zstyle -t ":completion:${curcontext}:paths" list-suffixes && listsfx=yes 
+	[[ "$pats" = ((|*[[:blank:]])\*(|[[:blank:]]*|\([^[:blank:]]##\))|*\([^[:blank:]]#/[^[:blank:]]#\)*) ]] && sopt=$sopt/ 
+	zstyle -a ":completion:${curcontext}:paths" accept-exact accex
+	zstyle -a ":completion:${curcontext}:" fake-files fake
+	zstyle -s ":completion:${curcontext}:" ignore-parents ignpar
+	zstyle -t ":completion:${curcontext}:paths" accept-exact-dirs && accept_exact_dirs=1 
+	zstyle -T ":completion:${curcontext}:paths" path-completion && path_completion=1 
+	if [[ -n "$compstate[pattern_match]" ]]
+	then
+		if {
+				[[ -z "$SUFFIX" ]] && _have_glob_qual "$PREFIX" complete
+			} || _have_glob_qual "$SUFFIX" complete
+		then
+			tmp3=${match[5]} 
+			if [[ -n "$SUFFIX" ]]
+			then
+				SUFFIX=${match[2]} 
+			else
+				PREFIX=${match[2]} 
+			fi
+			tmp2=() 
+			for tmp1 in "$pats[@]"
+			do
+				if _have_glob_qual "$tmp1" complete
+				then
+					tmp2+=("${match[1]}${tmp3}${match[5]})") 
+				else
+					tmp2+=("${tmp1}(${tmp3})") 
+				fi
+			done
+			pats=("$tmp2[@]") 
+		fi
+	fi
+	pre="$PREFIX" 
+	suf="$SUFFIX" 
+	opre="$PREFIX" 
+	osuf="$SUFFIX" 
+	orig="${PREFIX}${SUFFIX}" 
+	eorig="$orig" 
+	[[ $compstate[insert] = (*menu|[0-9]*) || -n "$_comp_correct" || ( -n "$compstate[pattern_match]" && "${orig#\~}" != (|*[^\\])[][*?#~^\|\<\>]* ) ]] && menu=yes 
+	if [[ -n "$_comp_correct" ]]
+	then
+		cfopt=- 
+		Uopt=-U 
+	else
+		Mopts=(-M "r:|/=* r:|=*") 
+	fi
+	if [[ "$pre" = [^][*?#^\|\<\>\\]#(\`[^\`]#\`|\$)*/* && "$compstate[quote]" != \' ]]
+	then
+		linepath="${(M)pre##*\$[^/]##/}" 
+		() {
+			setopt localoptions nounset
+			eval 'realpath=${(e)~linepath}' 2> /dev/null
+		}
+		[[ -z "$realpath" || "$realpath" = "$linepath" ]] && return 1
+		pre="${pre#${linepath}}" 
+		i='[^/]' 
+		i="${#linepath//$i}" 
+		orig="${orig[1,(in:i:)/][1,-2]}" 
+		donepath= 
+		prepaths=('') 
+	elif [[ "$pre[1]" = \~ && "$compstate[quote]" = (|\`) ]]
+	then
+		linepath="${pre[2,-1]%%/*}" 
+		if [[ -z "$linepath" ]]
+		then
+			realpath="${HOME%/}/" 
+		elif [[ "$linepath" = ([-+]|)[0-9]## ]]
+		then
+			if [[ "$linepath" != [-+]* ]]
+			then
+				tmp1="$linepath" 
+			else
+				if [[ "$linepath" = -* ]]
+				then
+					tmp1=$(( $#dirstack $linepath )) 
+				else
+					tmp1=$linepath[2,-1] 
+				fi
+				[[ -o pushdminus ]] && tmp1=$(( $#dirstack - $tmp1 )) 
+			fi
+			if (( ! tmp1 ))
+			then
+				realpath=$PWD/ 
+			elif [[ tmp1 -le $#dirstack ]]
+			then
+				realpath=$dirstack[tmp1]/ 
+			else
+				_message 'not enough directory stack entries'
+				return 1
+			fi
+		elif [[ "$linepath" = [-+] ]]
+		then
+			realpath=${~:-\~$linepath}/ 
+		else
+			eval "realpath=~${linepath}/" 2> /dev/null
+			if [[ -z "$realpath" ]]
+			then
+				_message "unknown user \`$linepath'"
+				return 1
+			fi
+		fi
+		linepath="~${linepath}/" 
+		[[ "$realpath" = "$linepath" ]] && return 1
+		pre="${pre#*/}" 
+		orig="${orig#*/}" 
+		donepath= 
+		prepaths=('') 
+	else
+		linepath= 
+		realpath= 
+		if zstyle -s ":completion:${curcontext}:" preserve-prefix tmp1 && [[ -n "$tmp1" && "$pre" = (#b)(${~tmp1})* ]]
+		then
+			pre="$pre[${#match[1]}+1,-1]" 
+			orig="$orig[${#match[1]}+1,-1]" 
+			donepath="$match[1]" 
+			prepaths=('') 
+		elif [[ "$pre[1]" = / ]]
+		then
+			pre="$pre[2,-1]" 
+			orig="$orig[2,-1]" 
+			donepath='/' 
+			prepaths=('') 
+		else
+			[[ "$pre" = (.|..)/* ]] && prepaths=('') 
+			donepath= 
+		fi
+	fi
+	for prepath in "$prepaths[@]"
+	do
+		skipped= 
+		cpre= 
+		if [[ ( -n $accept_exact_dirs || -z $path_completion ) && ${pre} = (#b)(*)/([^/]#) ]]
+		then
+			tmp1=${match[1]} 
+			tpre=${match[2]} 
+			tmp2=$tmp1 
+			tmp1=${tmp1//(#b)\\(?)/$match[1]} 
+			tpre=${tpre//(#b)\\([^\\\]\[\^\~\(\)\#\*\?])/$match[1]} 
+			tmp3=${donepath//(#b)\\(?)/$match[1]} 
+			while true
+			do
+				if [[ -z $path_completion || -d $prepath$realpath$tmp3$tmp2 ]]
+				then
+					tmp3=$tmp3$tmp1/ 
+					donepath=${tmp3//(#b)([\\\]\[\^\~\(\)\#\*\?])/\\$match[1]} 
+					pre=$tpre 
+					break
+				elif [[ $tmp1 = (#b)(*)/([^/]#) ]]
+				then
+					tmp1=$match[1] 
+					tpre=$match[2]/$tpre 
+				else
+					break
+				fi
+			done
+		fi
+		tpre="$pre" 
+		tsuf="$suf" 
+		testpath="${donepath//(#b)\\([\\\]\[\^\~\(\)\#\*\?])/$match[1]}" 
+		tmp2="${(M)tpre##${~skips}}" 
+		tpre="${tpre#$tmp2}" 
+		tmp1=("$prepath$realpath$donepath$tmp2") 
+		(( npathcheck = 0 ))
+		while true
+		do
+			origtmp1=("${tmp1[@]}") 
+			if [[ "$tpre" = */* ]]
+			then
+				PREFIX="${tpre%%/*}" 
+				SUFFIX= 
+			else
+				PREFIX="${tpre}" 
+				SUFFIX="${tsuf%%/*}" 
+			fi
+			tmp2=("$tmp1[@]") 
+			if [[ "$tpre$tsuf" = (#b)*/(*) ]]
+			then
+				if [[ -n "$fake${match[1]}" ]]
+				then
+					compfiles -P$cfopt tmp1 accex "$skipped" "$_matcher $matcher[2]" "$sdirs" fake
+				else
+					compfiles -P$cfopt tmp1 accex "$skipped" "$_matcher $matcher[2]" '' fake
+				fi
+			elif [[ "$sopt" = *[/f]* ]]
+			then
+				compfiles -p$cfopt tmp1 accex "$skipped" "$_matcher $matcher[2]" "$sdirs" fake "$pats[@]"
+			else
+				compfiles -p$cfopt tmp1 accex "$skipped" "$_matcher $matcher[2]" '' fake "$pats[@]"
+			fi
+			tmp1=($~tmp1)  2> /dev/null
+			if [[ -n "$PREFIX$SUFFIX" ]]
+			then
+				if (( ! $#tmp1 && npathcheck == 0 ))
+				then
+					(( npathcheck = 1 ))
+					for tmp3 in "$tmp2[@]"
+					do
+						if [[ -n $tmp3 && $tmp3 != */ ]]
+						then
+							tmp3+=/ 
+						fi
+						if [[ -e "$tmp3${(Q)PREFIX}${(Q)SUFFIX}" ]]
+						then
+							(( npathcheck = 2 ))
+						fi
+					done
+					if (( npathcheck == 2 ))
+					then
+						tmp1=("$origtmp1[@]") 
+						continue
+					fi
+				fi
+				if (( ! $#tmp1 ))
+				then
+					tmp2=(${^${tmp2:#/}}/$PREFIX$SUFFIX) 
+				elif [[ "$tmp1[1]" = */* ]]
+				then
+					if [[ -n "$_comp_correct" ]]
+					then
+						tmp2=("$tmp1[@]") 
+						builtin compadd -D tmp1 "$matcher[@]" - "${(@)tmp1:t}"
+						if [[ $#tmp1 -eq 0 ]]
+						then
+							tmp1=("$tmp2[@]") 
+							compadd -D tmp1 "$matcher[@]" - "${(@)tmp2:t}"
+						fi
+					else
+						tmp2=("$tmp1[@]") 
+						compadd -D tmp1 "$matcher[@]" - "${(@)tmp1:t}"
+					fi
+				else
+					tmp2=('') 
+					compadd -D tmp1 "$matcher[@]" -a tmp1
+				fi
+				if (( ! $#tmp1 ))
+				then
+					if [[ "$tmp2[1]" = */* ]]
+					then
+						tmp2=("${(@)tmp2#${prepath}${realpath}}") 
+						if [[ "$tmp2[1]" = */* ]]
+						then
+							tmp2=("${(@)tmp2:h}") 
+							compquote tmp2
+							if [[ "$tmp2" = */ ]]
+							then
+								exppaths=("$exppaths[@]" ${^tmp2}${tpre}${tsuf}) 
+							else
+								exppaths=("$exppaths[@]" ${^tmp2}/${tpre}${tsuf}) 
+							fi
+						elif [[ ${tpre}${tsuf} = */* ]]
+						then
+							exppaths=("$exppaths[@]" ${tpre}${tsuf}) 
+						fi
+					fi
+					continue 2
+				fi
+			elif (( ! $#tmp1 ))
+			then
+				if [[ -z "$tpre$tsuf" && -n "$pre$suf" ]]
+				then
+					pfxsfx=(-S '' "$pfxsfx[@]") 
+				elif [[ -n "$haspats" && -z "$tpre$tsuf$suf" && "$pre" = */ ]]
+				then
+					PREFIX="${opre}" 
+					SUFFIX="${osuf}" 
+					compadd -nQS '' - "$linepath$donepath$orig"
+					tmp4=- 
+				fi
+				continue 2
+			fi
+			if [[ -n "$ignpar" && -z "$_comp_no_ignore" && "$tpre$tsuf" != */* && $#tmp1 -ne 0 && ( "$ignpar" != *dir* || "$pats" = '*(-/)' ) && ( "$ignpar" != *..* || "$tmp1[1]" = *../* ) ]]
+			then
+				compfiles -i tmp1 ignore "$ignpar" "$prepath$realpath$donepath"
+				_comp_ignore+=(${(@)ignore#$prepath$realpath$donepath}) 
+				(( $#_comp_ignore && ! $mopts[(I)-F] )) && mopts=("$mopts[@]" -F _comp_ignore) 
+			fi
+			if [[ "$tpre" = */* ]]
+			then
+				tpre="${tpre#*/}" 
+			elif [[ "$tsuf" = */* ]]
+			then
+				tpre="${tsuf#*/}" 
+				tsuf= 
+			else
+				break
+			fi
+			tmp2="${(M)tpre##${~skips}}" 
+			if [[ -n "$tmp2" ]]
+			then
+				skipped="/$tmp2" 
+				tpre="${tpre#$tmp2}" 
+			else
+				skipped=/ 
+			fi
+			(( npathcheck = 0 ))
+		done
+		tmp3="$pre$suf" 
+		tpre="$pre" 
+		tsuf="$suf" 
+		if [[ -n "${prepath}${realpath}${testpath}" ]]
+		then
+			if [[ -o nocaseglob ]]
+			then
+				tmp1=("${(@)tmp1#(#i)${prepath}${realpath}${testpath}}") 
+			else
+				tmp1=("${(@)tmp1#${prepath}${realpath}${testpath}}") 
+			fi
+		fi
+		while true
+		do
+			compfiles -r tmp1 "${(Q)tmp3}"
+			tmp4=$? 
+			if [[ "$tpre" = */* ]]
+			then
+				tmp2="${cpre}${tpre%%/*}" 
+				PREFIX="${linepath}${donepath}${tmp2}" 
+				SUFFIX="/${tpre#*/}${tsuf#*/}" 
+			else
+				tmp2="${cpre}${tpre}" 
+				PREFIX="${linepath}${donepath}${tmp2}" 
+				SUFFIX="${tsuf}" 
+			fi
+			if (( tmp4 ))
+			then
+				tmp2="$testpath" 
+				if [[ -n "$linepath" ]]
+				then
+					compquote -p tmp2 tmp1
+				elif [[ -n "$tmp2" ]]
+				then
+					compquote -p tmp1
+					compquote tmp2
+				else
+					compquote tmp1 tmp2
+				fi
+				if [[ -z "$_comp_correct" && "$compstate[pattern_match]" = \* && -n "$listsfx" && "$tmp2" = (|*[^\\])[][*?#~^\|\<\>]* ]]
+				then
+					PREFIX="$opre" 
+					SUFFIX="$osuf" 
+				fi
+				if [[ -z "$compstate[insert]" ]] || {
+						! zstyle -t ":completion:${curcontext}:paths" expand suffix && [[ -z "$listsfx" && ( -n "$_comp_correct" || -z "$compstate[pattern_match]" || "$SUFFIX" != */* || "${SUFFIX#*/}" = (|*[^\\])[][*?#~^\|\<\>]* ) ]]
+					}
+				then
+					(( tmp4 )) && zstyle -t ":completion:${curcontext}:paths" ambiguous && compstate[to_end]= 
+					if [[ "$tmp3" = */* ]]
+					then
+						if [[ -z "$listsfx" || "$tmp3" != */?* ]]
+						then
+							tmp1=("${(@)tmp1%%/*}") 
+							_list_files tmp1 "$prepath$realpath$testpath"
+							compadd $Uopt -Qf "$mopts[@]" -p "${Uopt:+$IPREFIX}$linepath$tmp2" -s "/${tmp3#*/}${Uopt:+$ISUFFIX}" -W "$prepath$realpath$testpath" "$pfxsfx[@]" $Mopts $listopts -a tmp1
+						else
+							tmp1=("${(@)^tmp1%%/*}/${tmp3#*/}") 
+							_list_files tmp1 "$prepath$realpath$testpath"
+							compadd $Uopt -Qf "$mopts[@]" -p "${Uopt:+$IPREFIX}$linepath$tmp2" -s "${Uopt:+$ISUFFIX}" -W "$prepath$realpath$testpath" "$pfxsfx[@]" $Mopts $listopts -a tmp1
+						fi
+					else
+						_list_files tmp1 "$prepath$realpath$testpath"
+						compadd $Uopt -Qf "$mopts[@]" -p "${Uopt:+$IPREFIX}$linepath$tmp2" -s "${Uopt:+$ISUFFIX}" -W "$prepath$realpath$testpath" "$pfxsfx[@]" $Mopts $listopts -a tmp1
+					fi
+				else
+					if [[ "$tmp3" = */* ]]
+					then
+						tmp4=($Uopt -Qf "$mopts[@]" -p "${Uopt:+$IPREFIX}$linepath$tmp2" -W "$prepath$realpath$testpath" "$pfxsfx[@]" $Mopts) 
+						if [[ -z "$listsfx" ]]
+						then
+							for i in "$tmp1[@]"
+							do
+								tmpdisp=("$i") 
+								_list_files tmpdisp "$prepath$realpath$testpath"
+								compadd "$tmp4[@]" -s "${Uopt:+$ISUFFIX}" $listopts - "$tmpdisp"
+							done
+						else
+							[[ -n "$compstate[pattern_match]" ]] && SUFFIX="${SUFFIX:gs./.*/}*" 
+							for i in "$tmp1[@]"
+							do
+								_list_files i "$prepath$realpath$testpath"
+								compadd "$tmp4[@]" $listopts - "$i"
+							done
+						fi
+					else
+						_list_files tmp1 "$prepath$realpath$testpath"
+						compadd $Uopt -Qf "$mopts[@]" -p "${Uopt:+$IPREFIX}$linepath$tmp2" -s "${Uopt:+$ISUFFIX}" -W "$prepath$realpath$testpath" "$pfxsfx[@]" $Mopts $listopts -a tmp1
+					fi
+				fi
+				tmp4=- 
+				break
+			fi
+			if [[ "$tmp3" != */* ]]
+			then
+				tmp4= 
+				break
+			fi
+			testpath="${testpath}${tmp1[1]%%/*}/" 
+			tmp3="${tmp3#*/}" 
+			if [[ "$tpre" = */* ]]
+			then
+				if [[ -z "$_comp_correct" && -n "$compstate[pattern_match]" && "$tmp2" = (|*[^\\])[][*?#~^\|\<\>]* ]]
+				then
+					cpre="${cpre}${tmp1[1]%%/*}/" 
+				else
+					cpre="${cpre}${tpre%%/*}/" 
+				fi
+				tpre="${tpre#*/}" 
+			elif [[ "$tsuf" = */* ]]
+			then
+				[[ "$tsuf" != /* ]] && mid="$testpath" 
+				if [[ -z "$_comp_correct" && -n "$compstate[pattern_match]" && "$tmp2" = (|*[^\\])[][*?#~^\|\<\>]* ]]
+				then
+					cpre="${cpre}${tmp1[1]%%/*}/" 
+				else
+					cpre="${cpre}${tpre}/" 
+				fi
+				tpre="${tsuf#*/}" 
+				tsuf= 
+			else
+				tpre= 
+				tsuf= 
+			fi
+			tmp1=("${(@)tmp1#*/}") 
+		done
+		if [[ -z "$tmp4" ]]
+		then
+			if [[ "$mid" = */ ]]
+			then
+				PREFIX="${opre}" 
+				SUFFIX="${osuf}" 
+				tmp4="${testpath#${mid}}" 
+				if [[ $mid = */*/* ]]
+				then
+					tmp3="${mid%/*/}" 
+					tmp2="${${mid%/}##*/}" 
+					if [[ -n "$linepath" ]]
+					then
+						compquote -p tmp3
+					else
+						compquote tmp3
+					fi
+					compquote tmp4 tmp2 tmp1
+					for i in "$tmp1[@]"
+					do
+						_list_files tmp2 "$prepath$realpath${mid%/*/}"
+						compadd $Uopt -Qf "$mopts[@]" -p "${Uopt:+$IPREFIX}$linepath$tmp3/" -s "/$tmp4$i${Uopt:+$ISUFFIX}" -W "$prepath$realpath${mid%/*/}/" "$pfxsfx[@]" $Mopts $listopts - "$tmp2"
+					done
+				else
+					tmp2="${${mid%/}##*/}" 
+					compquote tmp4 tmp2 tmp1
+					for i in "$tmp1[@]"
+					do
+						_list_files tmp2 "$prepath$realpath${mid%/*/}"
+						compadd $Uopt -Qf "$mopts[@]" -p "${Uopt:+$IPREFIX}$linepath" -s "/$tmp4$i${Uopt:+$ISUFFIX}" -W "$prepath$realpath" "$pfxsfx[@]" $Mopts $listopts - "$tmp2"
+					done
+				fi
+			else
+				if [[ "$osuf" = */* ]]
+				then
+					PREFIX="${opre}${osuf}" 
+					SUFFIX= 
+				else
+					PREFIX="${opre}" 
+					SUFFIX="${osuf}" 
+				fi
+				tmp4="$testpath" 
+				if [[ -n "$linepath" ]]
+				then
+					compquote -p tmp4 tmp1
+				elif [[ -n "$tmp4" ]]
+				then
+					compquote -p tmp1
+					compquote tmp4
+				else
+					compquote tmp4 tmp1
+				fi
+				if [[ -z "$_comp_correct" && -n "$compstate[pattern_match]" && "${PREFIX#\~}$SUFFIX" = (|*[^\\])[][*?#~^\|\<\>]* ]]
+				then
+					tmp1=("$linepath$tmp4${(@)^tmp1}") 
+					_list_files tmp1 "$prepath$realpath"
+					compadd -Qf -W "$prepath$realpath" "$pfxsfx[@]" "$mopts[@]" -M "r:|/=* r:|=*" $listopts -a tmp1
+				else
+					_list_files tmp1 "$prepath$realpath$testpath"
+					compadd $Uopt -Qf -p "${Uopt:+$IPREFIX}$linepath$tmp4" -s "${Uopt:+$ISUFFIX}" -W "$prepath$realpath$testpath" "$pfxsfx[@]" "$mopts[@]" $Mopts $listopts -a tmp1
+				fi
+			fi
+		fi
+	done
+	if [[ _matcher_num -eq ${#_matchers} ]] && zstyle -t ":completion:${curcontext}:paths" expand prefix && [[ nm -eq compstate[nmatches] && $#exppaths -ne 0 && "$linepath$exppaths" != "$eorig" ]]
+	then
+		PREFIX="${opre}" 
+		SUFFIX="${osuf}" 
+		compadd -Q "$mopts[@]" -S '' -M "r:|/=* r:|=*" -p "$linepath" -a exppaths
+	fi
+	[[ nm -ne compstate[nmatches] ]]
+}
+_pax () {
+	# undefined
+	builtin autoload -XUz
+}
+_pbcopy () {
+	# undefined
+	builtin autoload -XUz
+}
+_pbm () {
+	# undefined
+	builtin autoload -XUz
+}
+_pbuilder () {
+	# undefined
+	builtin autoload -XUz
+}
+_pdf () {
+	# undefined
+	builtin autoload -XUz
+}
+_pdftk () {
+	# undefined
+	builtin autoload -XUz
+}
+_perf () {
+	# undefined
+	builtin autoload -XUz
+}
+_perforce () {
+	# undefined
+	builtin autoload -XUz
+}
+_perl () {
+	# undefined
+	builtin autoload -XUz
+}
+_perl_basepods () {
+	# undefined
+	builtin autoload -XUz
+}
+_perl_modules () {
+	# undefined
+	builtin autoload -XUz
+}
+_perldoc () {
+	# undefined
+	builtin autoload -XUz
+}
+_pfctl () {
+	# undefined
+	builtin autoload -XUz
+}
+_pfexec () {
+	# undefined
+	builtin autoload -XUz
+}
+_pgids () {
+	# undefined
+	builtin autoload -XUz
+}
+_pgrep () {
+	# undefined
+	builtin autoload -XUz
+}
+_php () {
+	# undefined
+	builtin autoload -XUz
+}
+_physical_volumes () {
+	# undefined
+	builtin autoload -XUz
+}
+_pick_variant () {
+	local output cmd pat pre
+	local -a var
+	local -A opts
+	(( $+_cmd_variant )) || typeset -gA _cmd_variant
+	zparseopts -D -A opts b: c: r:
+	: ${opts[-c]:=$words[1]}
+	while [[ $1 = *=* ]]
+	do
+		var+=("${1%%\=*}" "${1#*=}") 
+		shift
+	done
+	if (( ${#precommands:|builtin_precommands} ))
+	then
+		pre=command 
+	elif (( $+opts[-b] && ( $precommands[(I)builtin] || $+builtins[$opts[-c]] ) ))
+	then
+		(( $+opts[-r] )) && : ${(P)opts[-r]::=$opts[-b]}
+		return 0
+	elif (( $precommands[(I)builtin] ))
+	then
+		pre=builtin 
+	else
+		pre= 
+	fi
+	if [[ $pre != builtin ]] && (( $+_cmd_variant[$opts[-c]] ))
+	then
+		(( $+opts[-r] )) && : ${(P)opts[-r]::=${_cmd_variant[$opts[-c]]}}
+		[[ $_cmd_variant[$opts[-c]] = "$1" ]] && return 1
+		return 0
+	fi
+	output="$(_call_program variant $pre $opts[-c] "${@[2,-1]}" </dev/null 2>&1)" 
+	for cmd pat in "$var[@]"
+	do
+		if [[ $output = *$~pat* ]]
+		then
+			(( $+opts[-r] )) && : ${(P)opts[-r]::=$cmd}
+			_cmd_variant[$opts[-c]]="$cmd" 
+			return 0
+		fi
+	done
+	(( $+opts[-r] )) && : ${(P)opts[-r]::=$1}
+	[[ $pre != builtin ]] && _cmd_variant[$opts[-c]]="$1" 
+	return 1
+}
+_picocom () {
+	# undefined
+	builtin autoload -XUz
+}
+_pidof () {
+	# undefined
+	builtin autoload -XUz
+}
+_pids () {
+	# undefined
+	builtin autoload -XUz
+}
+_pine () {
+	# undefined
+	builtin autoload -XUz
+}
+_ping () {
+	# undefined
+	builtin autoload -XUz
+}
+_pip () {
+	# undefined
+	builtin autoload -XUz
+}
+_piuparts () {
+	# undefined
+	builtin autoload -XUz
+}
+_pkg-config () {
+	# undefined
+	builtin autoload -XUz
+}
+_pkg5 () {
+	# undefined
+	builtin autoload -XUz
+}
+_pkg_instance () {
+	# undefined
+	builtin autoload -XUz
+}
+_pkgadd () {
+	# undefined
+	builtin autoload -XUz
+}
+_pkgin () {
+	# undefined
+	builtin autoload -XUz
+}
+_pkginfo () {
+	# undefined
+	builtin autoload -XUz
+}
+_pkgrm () {
+	# undefined
+	builtin autoload -XUz
+}
+_pkgtool () {
+	# undefined
+	builtin autoload -XUz
+}
+_plutil () {
+	# undefined
+	builtin autoload -XUz
+}
+_pmap () {
+	# undefined
+	builtin autoload -XUz
+}
+_pon () {
+	# undefined
+	builtin autoload -XUz
+}
+_portaudit () {
+	# undefined
+	builtin autoload -XUz
+}
+_portlint () {
+	# undefined
+	builtin autoload -XUz
+}
+_portmaster () {
+	# undefined
+	builtin autoload -XUz
+}
+_ports () {
+	# undefined
+	builtin autoload -XUz
+}
+_portsnap () {
+	# undefined
+	builtin autoload -XUz
+}
+_postfix () {
+	# undefined
+	builtin autoload -XUz
+}
+_postgresql () {
+	# undefined
+	builtin autoload -XUz
+}
+_postscript () {
+	# undefined
+	builtin autoload -XUz
+}
+_powerd () {
+	# undefined
+	builtin autoload -XUz
+}
+_pr () {
+	# undefined
+	builtin autoload -XUz
+}
+_precommand () {
+	# undefined
+	builtin autoload -XUz
+}
+_prefix () {
+	# undefined
+	builtin autoload -XUz
+}
+_print () {
+	# undefined
+	builtin autoload -XUz
+}
+_printenv () {
+	# undefined
+	builtin autoload -XUz
+}
+_printers () {
+	# undefined
+	builtin autoload -XUz
+}
+_process_names () {
+	# undefined
+	builtin autoload -XUz
+}
+_procstat () {
+	# undefined
+	builtin autoload -XUz
+}
+_prompt () {
+	# undefined
+	builtin autoload -XUz
+}
+_prove () {
+	# undefined
+	builtin autoload -XUz
+}
+_prstat () {
+	# undefined
+	builtin autoload -XUz
+}
+_ps () {
+	# undefined
+	builtin autoload -XUz
+}
+_ps1234 () {
+	# undefined
+	builtin autoload -XUz
+}
+_pscp () {
+	# undefined
+	builtin autoload -XUz
+}
+_pspdf () {
+	# undefined
+	builtin autoload -XUz
+}
+_psutils () {
+	# undefined
+	builtin autoload -XUz
+}
+_ptree () {
+	# undefined
+	builtin autoload -XUz
+}
+_ptx () {
+	# undefined
+	builtin autoload -XUz
+}
+_pump () {
+	# undefined
+	builtin autoload -XUz
+}
+_putclip () {
+	# undefined
+	builtin autoload -XUz
+}
+_pv () {
+	# undefined
+	builtin autoload -XUz
+}
+_pwgen () {
+	# undefined
+	builtin autoload -XUz
+}
+_pydoc () {
+	# undefined
+	builtin autoload -XUz
+}
+_python () {
+	# undefined
+	builtin autoload -XUz
+}
+_python_modules () {
+	# undefined
+	builtin autoload -XUz
+}
+_qdbus () {
+	# undefined
+	builtin autoload -XUz
+}
+_qemu () {
+	# undefined
+	builtin autoload -XUz
+}
+_qiv () {
+	# undefined
+	builtin autoload -XUz
+}
+_qtplay () {
+	# undefined
+	builtin autoload -XUz
+}
+_quilt () {
+	# undefined
+	builtin autoload -XUz
+}
+_rake () {
+	# undefined
+	builtin autoload -XUz
+}
+_ranlib () {
+	# undefined
+	builtin autoload -XUz
+}
+_rar () {
+	# undefined
+	builtin autoload -XUz
+}
+_rcctl () {
+	# undefined
+	builtin autoload -XUz
+}
+_rclone () {
+	# undefined
+	builtin autoload -XUz
+}
+_rcs () {
+	# undefined
+	builtin autoload -XUz
+}
+_rdesktop () {
+	# undefined
+	builtin autoload -XUz
+}
+_read () {
+	# undefined
+	builtin autoload -XUz
+}
+_read_comp () {
+	# undefined
+	builtin autoload -XUz
+}
+_readelf () {
+	# undefined
+	builtin autoload -XUz
+}
+_readlink () {
+	# undefined
+	builtin autoload -XUz
+}
+_readshortcut () {
+	# undefined
+	builtin autoload -XUz
+}
+_rebootin () {
+	# undefined
+	builtin autoload -XUz
+}
+_redirect () {
+	# undefined
+	builtin autoload -XUz
+}
+_regex_arguments () {
+	# undefined
+	builtin autoload -XUz
+}
+_regex_words () {
+	# undefined
+	builtin autoload -XUz
+}
+_remote_files () {
+	# undefined
+	builtin autoload -XUz
+}
+_renice () {
+	# undefined
+	builtin autoload -XUz
+}
+_reprepro () {
+	# undefined
+	builtin autoload -XUz
+}
+_requested () {
+	local __gopt
+	__gopt=() 
+	zparseopts -D -a __gopt 1 2 V J x
+	if comptags -R "$1"
+	then
+		if [[ $# -gt 3 ]]
+		then
+			_all_labels - "$__gopt[@]" "$@" || return 1
+		elif [[ $# -gt 1 ]]
+		then
+			_description "$__gopt[@]" "$@"
+		fi
+		return 0
+	else
+		return 1
+	fi
+}
+_resolvectl () {
+	# undefined
+	builtin autoload -XUz
+}
+_retrieve_cache () {
+	# undefined
+	builtin autoload -XUz
+}
+_retrieve_mac_apps () {
+	# undefined
+	builtin autoload -XUz
+}
+_ri () {
+	# undefined
+	builtin autoload -XUz
+}
+_rlogin () {
+	# undefined
+	builtin autoload -XUz
+}
+_rm () {
+	local variant
+	declare -a args opts=(-A '-*') 
+	args=('(-f --force)'{-f,--force}'[ignore nonexistent files, never prompt]' '(-I --interactive)-i[prompt before every removal]' '(-r -R --recursive)'{-r,-R,--recursive}'[remove directories and their contents recursively]' '*:: :->file') 
+	_pick_variant -r variant -b zsh gnu=gnu $OSTYPE --help
+	case $variant in
+		(gnu) opts=() 
+			args+=('(-i --interactive)-I[prompt when removing many files]' '(-i -I)--interactive=-[prompt under given condition (defaulting to always)]::when:((once\:"prompt when removing many files"
+                                                                                           always\:"prompt before every removal"))' '--one-file-system[stay within filesystems of files given as arguments]' '(                   --preserve-root)--no-preserve-root[do not treat / specially]' '(--no-preserve-root                )--preserve-root[do not remove / (default)]' '(-d --dir)'{-d,--dir}'[remove directories as well]' '(-v --verbose)'{-v,--verbose}'[explain what is being done]' '(- *)--help[display help message and exit]' '(- *)--version[output version information and exit]')  ;;
+		(*) args=(${args:#*)--*\[*})  ;|
+		(darwin* | dragonfly* | freebsd* | netbsd* | openbsd* | zsh) args+=('-d[remove directories as well]')  ;|
+		(zsh) args+=('-s[enable paranoid behavior]')  ;;
+		(darwin* | dragonfly* | freebsd* | netbsd* | openbsd*) args+=('-P[overwrite files before deleting them]' '-v[explain what is being done]')  ;|
+		(darwin* | dragonfly* | freebsd* | netbsd*) args+=('-W[attempt to undelete named files]')  ;|
+		(dragonfly* | freebsd* | netbsd*) args+=("-x[don't cross file systems when removing a hierarchy]")  ;|
+		(dragonfly* | freebsd*) args+=('(-i)-I[prompt when removing many files]')  ;;
+	esac
+	local curcontext=$curcontext state line ret=1 
+	declare -A opt_args
+	_arguments -C -s -S $opts $args && ret=0 
+	case $state in
+		(file) (( CURRENT > 0 )) && line[CURRENT]=() 
+			line=(${line//(#m)[\[\]()\\*?#<>~\^\|]/\\$MATCH}) 
+			_files -F line && ret=0  ;;
+	esac
+	return $ret
+}
+_rmdir () {
+	# undefined
+	builtin autoload -XUz
+}
+_route () {
+	# undefined
+	builtin autoload -XUz
+}
+_routing_domains () {
+	# undefined
+	builtin autoload -XUz
+}
+_routing_tables () {
+	# undefined
+	builtin autoload -XUz
+}
+_rpm () {
+	# undefined
+	builtin autoload -XUz
+}
+_rrdtool () {
+	# undefined
+	builtin autoload -XUz
+}
+_rsync () {
+	# undefined
+	builtin autoload -XUz
+}
+_rubber () {
+	# undefined
+	builtin autoload -XUz
+}
+_ruby () {
+	# undefined
+	builtin autoload -XUz
+}
+_run-help () {
+	# undefined
+	builtin autoload -XUz
+}
+_runit () {
+	# undefined
+	builtin autoload -XUz
+}
+_rustup () {
+	# undefined
+	builtin autoload -XUz
+}
+_samba () {
+	# undefined
+	builtin autoload -XUz
+}
+_savecore () {
+	# undefined
+	builtin autoload -XUz
+}
+_say () {
+	# undefined
+	builtin autoload -XUz
+}
+_sbuild () {
+	# undefined
+	builtin autoload -XUz
+}
+_sc_usage () {
+	# undefined
+	builtin autoload -XUz
+}
+_sccs () {
+	# undefined
+	builtin autoload -XUz
+}
+_sched () {
+	# undefined
+	builtin autoload -XUz
+}
+_schedtool () {
+	# undefined
+	builtin autoload -XUz
+}
+_schroot () {
+	# undefined
+	builtin autoload -XUz
+}
+_scl () {
+	# undefined
+	builtin autoload -XUz
+}
+_scons () {
+	# undefined
+	builtin autoload -XUz
+}
+_screen () {
+	# undefined
+	builtin autoload -XUz
+}
+_script () {
+	# undefined
+	builtin autoload -XUz
+}
+_scselect () {
+	# undefined
+	builtin autoload -XUz
+}
+_scutil () {
+	# undefined
+	builtin autoload -XUz
+}
+_sd_hosts_or_user_at_host () {
+	# undefined
+	builtin autoload -XUz
+}
+_sd_outputmodes () {
+	# undefined
+	builtin autoload -XUz
+}
+_sd_unit_files () {
+	# undefined
+	builtin autoload -XUz
+}
+_seafile () {
+	# undefined
+	builtin autoload -XUz
+}
+_sed () {
+	# undefined
+	builtin autoload -XUz
+}
+_selinux_contexts () {
+	# undefined
+	builtin autoload -XUz
+}
+_selinux_roles () {
+	# undefined
+	builtin autoload -XUz
+}
+_selinux_types () {
+	# undefined
+	builtin autoload -XUz
+}
+_selinux_users () {
+	# undefined
+	builtin autoload -XUz
+}
+_sep_parts () {
+	# undefined
+	builtin autoload -XUz
+}
+_seq () {
+	# undefined
+	builtin autoload -XUz
+}
+_sequence () {
+	# undefined
+	builtin autoload -XUz
+}
+_service () {
+	# undefined
+	builtin autoload -XUz
+}
+_services () {
+	# undefined
+	builtin autoload -XUz
+}
+_set () {
+	# undefined
+	builtin autoload -XUz
+}
+_set_command () {
+	local command
+	command="$words[1]" 
+	[[ -z "$command" ]] && return
+	if (( $+builtins[$command] + $+functions[$command] ))
+	then
+		_comp_command1="$command" 
+		_comp_command="$_comp_command1" 
+	elif [[ "$command[1]" = '=' ]]
+	then
+		eval _comp_command2\=$command
+		_comp_command1="$command[2,-1]" 
+		_comp_command="$_comp_command2" 
+	elif [[ "$command" = ..#/* ]]
+	then
+		_comp_command1="${PWD}/$command" 
+		_comp_command2="${command:t}" 
+		_comp_command="$_comp_command2" 
+	elif [[ "$command" = */* ]]
+	then
+		_comp_command1="$command" 
+		_comp_command2="${command:t}" 
+		_comp_command="$_comp_command2" 
+	else
+		_comp_command1="$command" 
+		_comp_command2="$commands[$command]" 
+		_comp_command="$_comp_command1" 
+	fi
+}
+_setfacl () {
+	# undefined
+	builtin autoload -XUz
+}
+_setopt () {
+	# undefined
+	builtin autoload -XUz
+}
+_setpriv () {
+	# undefined
+	builtin autoload -XUz
+}
+_setsid () {
+	# undefined
+	builtin autoload -XUz
+}
+_setup () {
+	local val nm="$compstate[nmatches]" 
+	[[ $# -eq 1 ]] && 2="$1" 
+	if zstyle -a ":completion:${curcontext}:$1" list-colors val
+	then
+		zmodload -i zsh/complist
+		if [[ "$1" = default ]]
+		then
+			_comp_colors=("$val[@]") 
+		else
+			_comp_colors+=("(${2})${(@)^val:#(|\(*\)*)}" "${(M@)val:#\(*\)*}") 
+		fi
+	elif [[ "$1" = default ]]
+	then
+		unset ZLS_COLORS ZLS_COLOURS
+	fi
+	if zstyle -s ":completion:${curcontext}:$1" show-ambiguity val
+	then
+		zmodload -i zsh/complist
+		[[ $val = (yes|true|on) ]] && _ambiguous_color=4  || _ambiguous_color=$val 
+	fi
+	if zstyle -t ":completion:${curcontext}:$1" list-packed
+	then
+		compstate[list]="${compstate[list]} packed" 
+	elif [[ $? -eq 1 ]]
+	then
+		compstate[list]="${compstate[list]:gs/packed//}" 
+	else
+		compstate[list]="$_saved_list" 
+	fi
+	if zstyle -t ":completion:${curcontext}:$1" list-rows-first
+	then
+		compstate[list]="${compstate[list]} rows" 
+	elif [[ $? -eq 1 ]]
+	then
+		compstate[list]="${compstate[list]:gs/rows//}" 
+	else
+		compstate[list]="$_saved_list" 
+	fi
+	if zstyle -t ":completion:${curcontext}:$1" last-prompt
+	then
+		compstate[last_prompt]=yes 
+	elif [[ $? -eq 1 ]]
+	then
+		compstate[last_prompt]='' 
+	else
+		compstate[last_prompt]="$_saved_lastprompt" 
+	fi
+	if zstyle -t ":completion:${curcontext}:$1" accept-exact
+	then
+		compstate[exact]=accept 
+	elif [[ $? -eq 1 ]]
+	then
+		compstate[exact]='' 
+	else
+		compstate[exact]="$_saved_exact" 
+	fi
+	[[ _last_nmatches -ge 0 && _last_nmatches -ne nm ]] && _menu_style=("$_last_menu_style[@]" "$_menu_style[@]") 
+	if zstyle -a ":completion:${curcontext}:$1" menu val
+	then
+		_last_nmatches=$nm 
+		_last_menu_style=("$val[@]") 
+	else
+		_last_nmatches=-1 
+	fi
+	[[ "$_comp_force_list" != always ]] && zstyle -s ":completion:${curcontext}:$1" force-list val && [[ "$val" = always || ( "$val" = [0-9]## && ( -z "$_comp_force_list" || _comp_force_list -gt val ) ) ]] && _comp_force_list="$val" 
+}
+_setxkbmap () {
+	# undefined
+	builtin autoload -XUz
+}
+_sh () {
+	# undefined
+	builtin autoload -XUz
+}
+_shasum () {
+	# undefined
+	builtin autoload -XUz
+}
+_showmount () {
+	# undefined
+	builtin autoload -XUz
+}
+_shred () {
+	# undefined
+	builtin autoload -XUz
+}
+_shuf () {
+	# undefined
+	builtin autoload -XUz
+}
+_shutdown () {
+	# undefined
+	builtin autoload -XUz
+}
+_signals () {
+	# undefined
+	builtin autoload -XUz
+}
+_signify () {
+	# undefined
+	builtin autoload -XUz
+}
+_sisu () {
+	# undefined
+	builtin autoload -XUz
+}
+_slabtop () {
+	# undefined
+	builtin autoload -XUz
+}
+_slrn () {
+	# undefined
+	builtin autoload -XUz
+}
+_smartmontools () {
+	# undefined
+	builtin autoload -XUz
+}
+_smit () {
+	# undefined
+	builtin autoload -XUz
+}
+_snoop () {
+	# undefined
+	builtin autoload -XUz
+}
+_socket () {
+	# undefined
+	builtin autoload -XUz
+}
+_sockstat () {
+	# undefined
+	builtin autoload -XUz
+}
+_softwareupdate () {
+	# undefined
+	builtin autoload -XUz
+}
+_sort () {
+	# undefined
+	builtin autoload -XUz
+}
+_source () {
+	if [[ CURRENT -ge 3 ]]
+	then
+		compset -n 2
+		_normal
+	else
+		if [[ -prefix */ && ! -o pathdirs ]]
+		then
+			_files
+		elif [[ $service = . ]]
+		then
+			_files -W path
+		else
+			_files -W "(. $path)"
+		fi
+	fi
+}
+_spamassassin () {
+	# undefined
+	builtin autoload -XUz
+}
+_split () {
+	# undefined
+	builtin autoload -XUz
+}
+_sqlite () {
+	# undefined
+	builtin autoload -XUz
+}
+_sqsh () {
+	# undefined
+	builtin autoload -XUz
+}
+_ss () {
+	# undefined
+	builtin autoload -XUz
+}
+_ssh () {
+	# undefined
+	builtin autoload -XUz
+}
+_ssh_hosts () {
+	# undefined
+	builtin autoload -XUz
+}
+_sshfs () {
+	# undefined
+	builtin autoload -XUz
+}
+_stat () {
+	# undefined
+	builtin autoload -XUz
+}
+_stdbuf () {
+	# undefined
+	builtin autoload -XUz
+}
+_stgit () {
+	# undefined
+	builtin autoload -XUz
+}
+_store_cache () {
+	# undefined
+	builtin autoload -XUz
+}
+_stow () {
+	# undefined
+	builtin autoload -XUz
+}
+_strace () {
+	# undefined
+	builtin autoload -XUz
+}
+_strftime () {
+	# undefined
+	builtin autoload -XUz
+}
+_strings () {
+	# undefined
+	builtin autoload -XUz
+}
+_strip () {
+	# undefined
+	builtin autoload -XUz
+}
+_stty () {
+	# undefined
+	builtin autoload -XUz
+}
+_su () {
+	# undefined
+	builtin autoload -XUz
+}
+_sub_commands () {
+	# undefined
+	builtin autoload -XUz
+}
+_sublimetext () {
+	# undefined
+	builtin autoload -XUz
+}
+_subscript () {
+	# undefined
+	builtin autoload -XUz
+}
+_subversion () {
+	# undefined
+	builtin autoload -XUz
+}
+_sudo () {
+	setopt localoptions extended_glob
+	local environ e cmd cpp
+	local -a args _comp_priv_prefix
+	local -A opt_args
+	zstyle -a ":completion:${curcontext}:" environ environ
+	for e in "${environ[@]}"
+	do
+		local -x "$e"
+	done
+	args=('(-A --askpass)'{-A,--askpass}'[use a helper program for password prompting]' '(-B --bell)'{-B,--bell}'[ring bell when prompting]' '(-C --close-from)'{-C+,--close-from=}'[close file descriptors]:lowest fd to close' '(-D --chdir)'{-D+,--chdir=}'[change the working directory before running command]:directory:_directories' '(-g --group)'{-g+,--group=}'[run command as the specified group name or ID]:group:_groups' '(-)'{-h,--help}'[display help message and exit]' '(-h --host)'{-h+,--host=}'[run command on host]:host:_hosts' '(-K --remove-timestamp)'{-K,--remove-timestamp}'[remove timestamp file completely]' '(-k --reset-timestamp)'{-k,--reset-timestamp}'[invalidate timestamp file]' \*{-l,--list}"[list user's privileges or check a specific command]" '(-n --non-interactive)'{-n,--non-interactive}'[non-interactive mode, no prompts are used]' '(-p --prompt)'{-p+,--prompt=}'[use the specified password prompt]:prompt' '(-R --chroot)'{-R+,--chroot=}'[change the root directory before running command]:directory:_directories' '(-r --role)'{-r+,--role=}'[create SELinux security context with specified role]: :_selinux_roles' '(-S --stdin)'{-S,--stdin}'[read password from standard input]' '(-t --type)'{-t+,--type=}'[create SELinux security context with specified type]: :_selinux_types' '(-T --command-timeout)'{-T+,--command-timeout=}'[terminate command after specified time limit]:timeout' '(-U --other-user)'{-U+,--other-user=}'[in list mode, display privileges for user]:user:_users' '(-u --user)'{-u+,--user=}'[run command (or edit file) as specified user]:user:_users' '(-)'{-V,--version}'[display version information and exit]' '(-v --validate)'{-v,--validate}"[update user's timestamp without running a command]") 
+	if [[ $service = sudoedit ]] || (( $words[(i)-e] < $words[(i)^(*sudo|-[^-]*)] ))
+	then
+		args=(-A "-*" $args '!(-V --version -h --help)-e' '*:file:_files') 
+	else
+		cmd="$words[1]" 
+		cpp='_comp_priv_prefix=(
+    $cmd -n
+    ${(kv)opt_args[(I)(-[ugHEP]|--(user|group|set-home|preserve-env|preserve-groups))]}
+  )' 
+		args+=('(-e --edit 1 *)'{-e,--edit}'[edit files instead of running a command]' '(-s --shell)'{-s,--shell}'[run shell as the target user; a command may also be specified]' '(-i --login)'{-i,--login}'[run login shell as the target user; a command may also be specified]' '(-b --background -i --login -s --shell -e --edit)'{-b,--background}'[run command in the background]' '(--preserve-env -i --login -s --shell -e --edit)-E[preserve user environment when running command]' '(-E -i --login -s --shell -e --edit)--preserve-env=-[preserve user environment when running command]::environment variable:_sequence _parameters -g "*export*"' '(-H --set-home -i --login -s --shell -e --edit)'{-H,--set-home}"[set HOME variable to target user's home dir]" '(-P --preserve-groups -i -login -s --shell -e --edit)'{-P,--preserve-groups}"[preserve group vector instead of setting to target's]" "(-)1: :{ $cpp; _command_names -e }" "*:: :{ $cpp; _normal }") 
+	fi
+	_arguments -s -S $args
+}
+_suffix_alias_files () {
+	local expl pat
+	(( ${#saliases} )) || return 1
+	if (( ${#saliases} == 1 ))
+	then
+		pat="*.${(kq)saliases}" 
+	else
+		local -a tmpa
+		tmpa=(${(kq)saliases}) 
+		pat="*.(${(kj.|.)tmpa})" 
+	fi
+	_path_files "$@" -g $pat
+}
+_surfraw () {
+	# undefined
+	builtin autoload -XUz
+}
+_svcadm () {
+	# undefined
+	builtin autoload -XUz
+}
+_svccfg () {
+	# undefined
+	builtin autoload -XUz
+}
+_svcprop () {
+	# undefined
+	builtin autoload -XUz
+}
+_svcs () {
+	# undefined
+	builtin autoload -XUz
+}
+_svcs_fmri () {
+	# undefined
+	builtin autoload -XUz
+}
+_svn-buildpackage () {
+	# undefined
+	builtin autoload -XUz
+}
+_sw_vers () {
+	# undefined
+	builtin autoload -XUz
+}
+_swaks () {
+	# undefined
+	builtin autoload -XUz
+}
+_swanctl () {
+	# undefined
+	builtin autoload -XUz
+}
+_swift () {
+	# undefined
+	builtin autoload -XUz
+}
+_sys_calls () {
+	# undefined
+	builtin autoload -XUz
+}
+_sysclean () {
+	# undefined
+	builtin autoload -XUz
+}
+_sysctl () {
+	# undefined
+	builtin autoload -XUz
+}
+_sysmerge () {
+	# undefined
+	builtin autoload -XUz
+}
+_syspatch () {
+	# undefined
+	builtin autoload -XUz
+}
+_sysrc () {
+	# undefined
+	builtin autoload -XUz
+}
+_sysstat () {
+	# undefined
+	builtin autoload -XUz
+}
+_systat () {
+	# undefined
+	builtin autoload -XUz
+}
+_system_profiler () {
+	# undefined
+	builtin autoload -XUz
+}
+_systemctl () {
+	# undefined
+	builtin autoload -XUz
+}
+_systemd () {
+	# undefined
+	builtin autoload -XUz
+}
+_systemd-analyze () {
+	# undefined
+	builtin autoload -XUz
+}
+_systemd-delta () {
+	# undefined
+	builtin autoload -XUz
+}
+_systemd-inhibit () {
+	# undefined
+	builtin autoload -XUz
+}
+_systemd-path () {
+	# undefined
+	builtin autoload -XUz
+}
+_systemd-run () {
+	# undefined
+	builtin autoload -XUz
+}
+_systemd-tmpfiles () {
+	# undefined
+	builtin autoload -XUz
+}
+_sysupgrade () {
+	# undefined
+	builtin autoload -XUz
+}
+_tac () {
+	# undefined
+	builtin autoload -XUz
+}
+_tags () {
+	local prev
+	if [[ "$1" = -- ]]
+	then
+		prev=- 
+		shift
+	fi
+	if (( $# ))
+	then
+		local curcontext="$curcontext" order tag nodef tmp 
+		if [[ "$1" = -C?* ]]
+		then
+			curcontext="${curcontext%:*}:${1[3,-1]}" 
+			shift
+		elif [[ "$1" = -C ]]
+		then
+			curcontext="${curcontext%:*}:${2}" 
+			shift 2
+		fi
+		[[ "$1" = -(|-) ]] && shift
+		zstyle -a ":completion:${curcontext}:" group-order order && compgroups "$order[@]"
+		comptags "-i$prev" "$curcontext" "$@"
+		if [[ -n "$_sort_tags" ]]
+		then
+			"$_sort_tags" "$@"
+		else
+			zstyle -a ":completion:${curcontext}:" tag-order order || (( ! ${@[(I)options]} )) || order=('(|*-)argument-* (|*-)option[-+]* values' options) 
+			for tag in $order
+			do
+				case $tag in
+					(-) nodef=yes  ;;
+					(\!*) comptry "${(@)argv:#(${(j:|:)~${=~tag[2,-1]}})}" ;;
+					(?*) comptry -m "$tag" ;;
+				esac
+			done
+			[[ -z "$nodef" ]] && comptry "$@"
+		fi
+		comptags "-T$prev"
+		return
+	fi
+	comptags "-N$prev"
+}
+_tail () {
+	# undefined
+	builtin autoload -XUz
+}
+_tar () {
+	# undefined
+	builtin autoload -XUz
+}
+_tar_archive () {
+	# undefined
+	builtin autoload -XUz
+}
+_tardy () {
+	# undefined
+	builtin autoload -XUz
+}
+_tcpdump () {
+	# undefined
+	builtin autoload -XUz
+}
+_tcpsys () {
+	# undefined
+	builtin autoload -XUz
+}
+_tcptraceroute () {
+	# undefined
+	builtin autoload -XUz
+}
+_tee () {
+	# undefined
+	builtin autoload -XUz
+}
+_telnet () {
+	# undefined
+	builtin autoload -XUz
+}
+_terminals () {
+	# undefined
+	builtin autoload -XUz
+}
+_tex () {
+	# undefined
+	builtin autoload -XUz
+}
+_texi () {
+	# undefined
+	builtin autoload -XUz
+}
+_texinfo () {
+	# undefined
+	builtin autoload -XUz
+}
+_tidy () {
+	# undefined
+	builtin autoload -XUz
+}
+_tiff () {
+	# undefined
+	builtin autoload -XUz
+}
+_tilde () {
+	# undefined
+	builtin autoload -XUz
+}
+_tilde_files () {
+	# undefined
+	builtin autoload -XUz
+}
+_time_zone () {
+	# undefined
+	builtin autoload -XUz
+}
+_timedatectl () {
+	# undefined
+	builtin autoload -XUz
+}
+_timeout () {
+	# undefined
+	builtin autoload -XUz
+}
+_tin () {
+	# undefined
+	builtin autoload -XUz
+}
+_tla () {
+	# undefined
+	builtin autoload -XUz
+}
+_tload () {
+	# undefined
+	builtin autoload -XUz
+}
+_tmux () {
+	# undefined
+	builtin autoload -XUz
+}
+_todo.sh () {
+	# undefined
+	builtin autoload -XUz
+}
+_toilet () {
+	# undefined
+	builtin autoload -XUz
+}
+_toolchain-source () {
+	# undefined
+	builtin autoload -XUz
+}
+_top () {
+	# undefined
+	builtin autoload -XUz
+}
+_topgit () {
+	# undefined
+	builtin autoload -XUz
+}
+_totd () {
+	# undefined
+	builtin autoload -XUz
+}
+_touch () {
+	# undefined
+	builtin autoload -XUz
+}
+_tpb () {
+	# undefined
+	builtin autoload -XUz
+}
+_tput () {
+	# undefined
+	builtin autoload -XUz
+}
+_tr () {
+	# undefined
+	builtin autoload -XUz
+}
+_tracepath () {
+	# undefined
+	builtin autoload -XUz
+}
+_transmission () {
+	# undefined
+	builtin autoload -XUz
+}
+_trap () {
+	# undefined
+	builtin autoload -XUz
+}
+_trash () {
+	# undefined
+	builtin autoload -XUz
+}
+_tree () {
+	# undefined
+	builtin autoload -XUz
+}
+_truncate () {
+	# undefined
+	builtin autoload -XUz
+}
+_truss () {
+	# undefined
+	builtin autoload -XUz
+}
+_tty () {
+	# undefined
+	builtin autoload -XUz
+}
+_ttyctl () {
+	# undefined
+	builtin autoload -XUz
+}
+_ttys () {
+	# undefined
+	builtin autoload -XUz
+}
+_tune2fs () {
+	# undefined
+	builtin autoload -XUz
+}
+_twidge () {
+	# undefined
+	builtin autoload -XUz
+}
+_twisted () {
+	# undefined
+	builtin autoload -XUz
+}
+_typeset () {
+	# undefined
+	builtin autoload -XUz
+}
+_udevadm () {
+	# undefined
+	builtin autoload -XUz
+}
+_ulimit () {
+	# undefined
+	builtin autoload -XUz
+}
+_uml () {
+	# undefined
+	builtin autoload -XUz
+}
+_umountable () {
+	# undefined
+	builtin autoload -XUz
+}
+_unace () {
+	# undefined
+	builtin autoload -XUz
+}
+_uname () {
+	# undefined
+	builtin autoload -XUz
+}
+_unexpand () {
+	# undefined
+	builtin autoload -XUz
+}
+_unhash () {
+	# undefined
+	builtin autoload -XUz
+}
+_uniq () {
+	# undefined
+	builtin autoload -XUz
+}
+_unison () {
+	# undefined
+	builtin autoload -XUz
+}
+_units () {
+	# undefined
+	builtin autoload -XUz
+}
+_unshare () {
+	# undefined
+	builtin autoload -XUz
+}
+_update-alternatives () {
+	# undefined
+	builtin autoload -XUz
+}
+_update-rc.d () {
+	# undefined
+	builtin autoload -XUz
+}
+_uptime () {
+	# undefined
+	builtin autoload -XUz
+}
+_urls () {
+	# undefined
+	builtin autoload -XUz
+}
+_urpmi () {
+	# undefined
+	builtin autoload -XUz
+}
+_urxvt () {
+	# undefined
+	builtin autoload -XUz
+}
+_usbconfig () {
+	# undefined
+	builtin autoload -XUz
+}
+_uscan () {
+	# undefined
+	builtin autoload -XUz
+}
+_user_admin () {
+	# undefined
+	builtin autoload -XUz
+}
+_user_at_host () {
+	# undefined
+	builtin autoload -XUz
+}
+_user_expand () {
+	# undefined
+	builtin autoload -XUz
+}
+_user_math_func () {
+	# undefined
+	builtin autoload -XUz
+}
+_users () {
+	# undefined
+	builtin autoload -XUz
+}
+_users_on () {
+	# undefined
+	builtin autoload -XUz
+}
+_valgrind () {
+	# undefined
+	builtin autoload -XUz
+}
+_value () {
+	# undefined
+	builtin autoload -XUz
+}
+_values () {
+	# undefined
+	builtin autoload -XUz
+}
+_vared () {
+	# undefined
+	builtin autoload -XUz
+}
+_vars () {
+	# undefined
+	builtin autoload -XUz
+}
+_vcs_info () {
+	# undefined
+	builtin autoload -XUz
+}
+_vcs_info_hooks () {
+	# undefined
+	builtin autoload -XUz
+}
+_vi () {
+	# undefined
+	builtin autoload -XUz
+}
+_vim () {
+	(( $+functions[_vim_files] )) || _vim_files () {
+		case $PREFIX in
+			(+*) _files -P './' $* && return 0 ;;
+			((scp|http(|s)|(|s)ftp):*) _urls ;;
+			(*) _files $* ;;
+		esac
+		case $PREFIX in
+			(+) _message -e 'start at a given line (default: end of file)' ;;
+			(+<1->) _message -e 'line number' ;;
+		esac
+	}
+	local curcontext="$curcontext" state line expl ret=1 
+	typeset -A opt_args
+	local arguments
+	arguments=('-m[modifications (writing files) not allowed]' '-M[modifications in text not allowed]' '-b[binary mode]' '-l[lisp mode]' '-V-[verbosity level]::verbosity [10]:->verbosity' '-D[debugging mode]' '-n[no swap file (memory only)]' {-r,-L}'[list swap files and exit or recover from a swap file]::swap file:_vim_files -g "*.sw?(-.)"' '(-H)-A[start in Arabic mode]' '(-A)-H[start in Hebrew mode]' '-u[use given vimrc file instead of default .vimrc]:config:->config' "--noplugin[don't load plugin scripts]" '-o-[number of windows to open (default: one for each file)]::window count: ' '-O-[number of windows to vertically split open (default is one for each file)]::window count: ' '-p-[number of tabs to open (default: one for each file)]::tab count: ' '(* -t)-q+[quickfix file]::file:_files' '*--cmd[execute given command before loading any RC files]:command: ' '-c[execute given command after loading the first file]:command: ' '-S[source a session file after loading the first file]::session file:_files' '-s[read normal-mode commands from script file]:script file:_files' '-w[append all typed commands to given file]:output file:_files' '-W[write all typed commands to given file, overwriting existing file]:output file:_files' '--startuptime[write startup timing messages to given file]:log file:_files' '(- *)'{-h,--help}'[print help and exit]' '(- *)--version[print version information and exit]' '(* -q)-t+[edit file where tag is defined]:tag:_complete_tag' '(-t -q)*:file:_vim_files') 
+	if [[ $service = nvim ]]
+	then
+		arguments+=('(-e -E -es -Es -s -d)-e[ex mode, read stdin as ex command]' '(-e -E -es -Es -s -d)-E[ex mode, read stdin as text]' '(-e -E -es -Es -s -d)-es[silent mode, read stdin as ex command]' '(-e -E -es -Es -s -d)-Es[silent mode, read stdin as text]' '-i[use the specified shada file]:shada file:_files' '(- *)-v[print version information and exit]' '(- *)--api-info[print msgpack-encoded api-metadata and exit]' '--headless[do not start user interface]' '--embed[use standard input and output as a msgpack-rpc channel]' '--listen[start RPC server on the specified socket or named pipe]:address') 
+	else
+		arguments+=('(-v    -E    -d -y)-e[ex mode]' '(-v -e       -d -y)-E[improved ex mode]' '(   -e -E -s -d -y)-v[vi mode]' '(-v -e -E -s -d   )-y[easy mode]' '-C[start in compatible mode]' '-N[start in incompatible mode]' '-nb[start as NetBean server]' '-T[set terminal type]:::_terminals' '--not-a-term[skip warning for input/output not being a terminal]' '--ttyfail[exit if input or output is not a terminal]' '-X[do not connect to X server]' '-x[edit encrypted files]' '--remote[edit given files in a vim server if possible]:*:file:_vim_files' '--remote-silent[as --remote but without complaining if not possible]:*:file:_vim_files' '--remote-wait[as --remote but wait for files to have been edited]:*:file:_vim_files' '--remote-wait-silent[as --remote-wait but without complaining if not possible]:*:file:_vim_files' '--remote-send[send given keys to vim server if possible]:keys: ' '--remote-tab[as --remote but open tab page for each file]:*:file:_vim_files' '--remote-tab-silent[as --remote-silent but open tab page for each file]:*:file:_vim_files' '--remote-tab-wait[as --remote-wait but open tab page for each file]:*:file:_vim_files' '--remote-tab-wait-silent[as --remote-wait-silent but open tab page for each file]:*:file:_vim_files' '--remote-expr[evaluate given expression in a vim server and print result]:expression: ' '--literal[do not expand wildcards in arguments (this is useless with ZSH)]' '(- *)--serverlist[list available vim servers and exit]' '--servername[name of vim server to send to or name of server to become]:server name:->server' '--socketid[run GVIM in another window]' '-i[use specified viminfo file]:viminfo file [~/.viminfo]:_files' '--clean[start with defaults in non-compatible mode]') 
+	fi
+	[[ $service != *g* && $service != nvim ]] && arguments+='-g[start with GUI]' 
+	[[ $service != r* ]] && arguments+='-Z[restricted mode]' 
+	[[ $service != *diff ]] && arguments+='(-v -e -E -es -Es -s -y)-d[diff mode]' 
+	[[ $service != *view ]] && arguments+='-R[readonly mode]' 
+	[[ $service = *g* ]] || (( ${words[(I)-g]} )) && arguments+=('(--nofork -f)'{--nofork,-f}'[do not detach the GUI version from the shell]' '(-background -bg)'{-background,-bg}'[use specified color for the background]:color:_x_color' '(-foreground -fg)'{-foreground,-fg}'[use specified color for normal text]:color:_x_color' '-font:font:_xft_fonts' '-geometry:geometry:_x_geometry' '-iconic[start vim iconified]' '(-rv -reverse)'{-rv,-reverse}'[use reverse video]' '-display:display:_x_display' '--role[set unique role to identify main window]:role' '--socketid[open vim inside another GTK widget]:xid' '--echo-wid[echo window ID on stdout]' '-U[use given gvimrc file instead of default .gvimrc]:gui config:->configgui') 
+	_arguments -C -S $arguments && ret=0 
+	if [[ "$state" = server ]]
+	then
+		local -a servers
+		servers=(${(f)"$(_call_program servers $words[1] --serverlist 2>/dev/null)"}) 
+		_wanted servers expl server compadd -M 'm:{a-z}={A-Z}' -a servers && ret=0 
+	elif [[ $state = verbosity ]]
+	then
+		_tags numbers files
+		while _tags
+		do
+			_requested numbers && _describe -V 'verbosity [10]' "(
+      0:don\'t' display any messages'
+      1:'display when viminfo file is read or written'
+      2:'display sourced files'
+      5:'display every searched tag-file'
+      8:'display files that trigger autocommands'
+      9:'display every triggered autocommand'
+      12:'display every executed function'
+      13:'report every thrown, caught, finished, or discarded exception'
+      14:'display anything pending in a :finally clause'
+      15:'display every executed ex-command'
+    )" && ret=0 
+			if _requested files expl 'file for verbose output'
+			then
+				compset -P '[0-9]#'
+				_files "$expl[@]" && ret=0 
+			fi
+			(( ret )) || break
+		done
+	elif [[ "$state" = config* ]]
+	then
+		_tags special files
+		local names=("NONE:'skip initialization from files and environment variables'" "NORC:'same as NONE, but load plugins'") 
+		[[ $state != configgui || $service != *g* ]] && names+=("DEFAULTS:'same as NONE, but loads defaults.vim'") 
+		while _tags
+		do
+			_requested special && _describe -V 'special' "(${(F)names})" && ret=0 
+			if _requested files expl 'rc file'
+			then
+				_files "$expl[@]" && ret=0 
+			fi
+			(( ret )) || break
+		done
+	fi
+	return ret
+}
+_vim-addons () {
+	# undefined
+	builtin autoload -XUz
+}
+_vim_files () {
+	case $PREFIX in
+		(+*) _files -P './' $* && return 0 ;;
+		((scp|http(|s)|(|s)ftp):*) _urls ;;
+		(*) _files $* ;;
+	esac
+	case $PREFIX in
+		(+) _message -e 'start at a given line (default: end of file)' ;;
+		(+<1->) _message -e 'line number' ;;
+	esac
+}
+_visudo () {
+	# undefined
+	builtin autoload -XUz
+}
+_vmctl () {
+	# undefined
+	builtin autoload -XUz
+}
+_vmstat () {
+	# undefined
+	builtin autoload -XUz
+}
+_vnc () {
+	# undefined
+	builtin autoload -XUz
+}
+_volume_groups () {
+	# undefined
+	builtin autoload -XUz
+}
+_vorbis () {
+	# undefined
+	builtin autoload -XUz
+}
+_vpnc () {
+	# undefined
+	builtin autoload -XUz
+}
+_vserver () {
+	# undefined
+	builtin autoload -XUz
+}
+_w () {
+	# undefined
+	builtin autoload -XUz
+}
+_w3m () {
+	# undefined
+	builtin autoload -XUz
+}
+_wait () {
+	# undefined
+	builtin autoload -XUz
+}
+_wajig () {
+	# undefined
+	builtin autoload -XUz
+}
+_wakeup_capable_devices () {
+	# undefined
+	builtin autoload -XUz
+}
+_wanna-build () {
+	# undefined
+	builtin autoload -XUz
+}
+_wanted () {
+	local -a __targs __gopt
+	zparseopts -D -a __gopt 1 2 V J x C:=__targs
+	_tags "$__targs[@]" "$1"
+	while _tags
+	do
+		_all_labels "$__gopt[@]" "$@" && return 0
+	done
+	return 1
+}
+_watch () {
+	# undefined
+	builtin autoload -XUz
+}
+_watch-snoop () {
+	# undefined
+	builtin autoload -XUz
+}
+_wc () {
+	# undefined
+	builtin autoload -XUz
+}
+_webbrowser () {
+	# undefined
+	builtin autoload -XUz
+}
+_wget () {
+	# undefined
+	builtin autoload -XUz
+}
+_whereis () {
+	# undefined
+	builtin autoload -XUz
+}
+_which () {
+	# undefined
+	builtin autoload -XUz
+}
+_who () {
+	# undefined
+	builtin autoload -XUz
+}
+_whois () {
+	# undefined
+	builtin autoload -XUz
+}
+_widgets () {
+	# undefined
+	builtin autoload -XUz
+}
+_wiggle () {
+	# undefined
+	builtin autoload -XUz
+}
+_wipefs () {
+	# undefined
+	builtin autoload -XUz
+}
+_wpa_cli () {
+	# undefined
+	builtin autoload -XUz
+}
+_x_arguments () {
+	# undefined
+	builtin autoload -XUz
+}
+_x_borderwidth () {
+	# undefined
+	builtin autoload -XUz
+}
+_x_color () {
+	# undefined
+	builtin autoload -XUz
+}
+_x_colormapid () {
+	# undefined
+	builtin autoload -XUz
+}
+_x_cursor () {
+	# undefined
+	builtin autoload -XUz
+}
+_x_display () {
+	# undefined
+	builtin autoload -XUz
+}
+_x_extension () {
+	# undefined
+	builtin autoload -XUz
+}
+_x_font () {
+	# undefined
+	builtin autoload -XUz
+}
+_x_geometry () {
+	# undefined
+	builtin autoload -XUz
+}
+_x_keysym () {
+	# undefined
+	builtin autoload -XUz
+}
+_x_locale () {
+	# undefined
+	builtin autoload -XUz
+}
+_x_modifier () {
+	# undefined
+	builtin autoload -XUz
+}
+_x_name () {
+	# undefined
+	builtin autoload -XUz
+}
+_x_resource () {
+	# undefined
+	builtin autoload -XUz
+}
+_x_selection_timeout () {
+	# undefined
+	builtin autoload -XUz
+}
+_x_title () {
+	# undefined
+	builtin autoload -XUz
+}
+_x_utils () {
+	# undefined
+	builtin autoload -XUz
+}
+_x_visual () {
+	# undefined
+	builtin autoload -XUz
+}
+_x_window () {
+	# undefined
+	builtin autoload -XUz
+}
+_xargs () {
+	# undefined
+	builtin autoload -XUz
+}
+_xauth () {
+	# undefined
+	builtin autoload -XUz
+}
+_xautolock () {
+	# undefined
+	builtin autoload -XUz
+}
+_xclip () {
+	# undefined
+	builtin autoload -XUz
+}
+_xcode-select () {
+	# undefined
+	builtin autoload -XUz
+}
+_xdvi () {
+	# undefined
+	builtin autoload -XUz
+}
+_xfig () {
+	# undefined
+	builtin autoload -XUz
+}
+_xft_fonts () {
+	# undefined
+	builtin autoload -XUz
+}
+_xinput () {
+	# undefined
+	builtin autoload -XUz
+}
+_xloadimage () {
+	# undefined
+	builtin autoload -XUz
+}
+_xmlsoft () {
+	# undefined
+	builtin autoload -XUz
+}
+_xmlstarlet () {
+	# undefined
+	builtin autoload -XUz
+}
+_xmms2 () {
+	# undefined
+	builtin autoload -XUz
+}
+_xmodmap () {
+	# undefined
+	builtin autoload -XUz
+}
+_xournal () {
+	# undefined
+	builtin autoload -XUz
+}
+_xpdf () {
+	# undefined
+	builtin autoload -XUz
+}
+_xrandr () {
+	# undefined
+	builtin autoload -XUz
+}
+_xscreensaver () {
+	# undefined
+	builtin autoload -XUz
+}
+_xset () {
+	# undefined
+	builtin autoload -XUz
+}
+_xt_arguments () {
+	# undefined
+	builtin autoload -XUz
+}
+_xt_session_id () {
+	# undefined
+	builtin autoload -XUz
+}
+_xterm () {
+	# undefined
+	builtin autoload -XUz
+}
+_xv () {
+	# undefined
+	builtin autoload -XUz
+}
+_xwit () {
+	# undefined
+	builtin autoload -XUz
+}
+_xxd () {
+	# undefined
+	builtin autoload -XUz
+}
+_xz () {
+	# undefined
+	builtin autoload -XUz
+}
+_yafc () {
+	# undefined
+	builtin autoload -XUz
+}
+_yast () {
+	# undefined
+	builtin autoload -XUz
+}
+_yodl () {
+	# undefined
+	builtin autoload -XUz
+}
+_yp () {
+	# undefined
+	builtin autoload -XUz
+}
+_yum () {
+	# undefined
+	builtin autoload -XUz
+}
+_zargs () {
+	# undefined
+	builtin autoload -XUz
+}
+_zattr () {
+	# undefined
+	builtin autoload -XUz
+}
+_zcalc () {
+	# undefined
+	builtin autoload -XUz
+}
+_zcalc_line () {
+	# undefined
+	builtin autoload -XUz
+}
+_zcat () {
+	# undefined
+	builtin autoload -XUz
+}
+_zcompile () {
+	# undefined
+	builtin autoload -XUz
+}
+_zdump () {
+	# undefined
+	builtin autoload -XUz
+}
+_zeal () {
+	# undefined
+	builtin autoload -XUz
+}
+_zed () {
+	# undefined
+	builtin autoload -XUz
+}
+_zfs () {
+	# undefined
+	builtin autoload -XUz
+}
+_zfs_dataset () {
+	# undefined
+	builtin autoload -XUz
+}
+_zfs_pool () {
+	# undefined
+	builtin autoload -XUz
+}
+_zftp () {
+	# undefined
+	builtin autoload -XUz
+}
+_zip () {
+	# undefined
+	builtin autoload -XUz
+}
+_zle () {
+	# undefined
+	builtin autoload -XUz
+}
+_zlogin () {
+	# undefined
+	builtin autoload -XUz
+}
+_zmodload () {
+	# undefined
+	builtin autoload -XUz
+}
+_zmv () {
+	# undefined
+	builtin autoload -XUz
+}
+_zoneadm () {
+	# undefined
+	builtin autoload -XUz
+}
+_zones () {
+	# undefined
+	builtin autoload -XUz
+}
+_zparseopts () {
+	# undefined
+	builtin autoload -XUz
+}
+_zpty () {
+	# undefined
+	builtin autoload -XUz
+}
+_zsh () {
+	# undefined
+	builtin autoload -XUz
+}
+_zsh-mime-handler () {
+	# undefined
+	builtin autoload -XUz
+}
+_zsocket () {
+	# undefined
+	builtin autoload -XUz
+}
+_zstyle () {
+	# undefined
+	builtin autoload -XUz
+}
+_ztodo () {
+	# undefined
+	builtin autoload -XUz
+}
+_zypper () {
+	# undefined
+	builtin autoload -XUz
+}
+add-zsh-hook () {
+	emulate -L zsh
+	local -a hooktypes
+	hooktypes=(chpwd precmd preexec periodic zshaddhistory zshexit zsh_directory_name) 
+	local usage="Usage: add-zsh-hook hook function\nValid hooks are:\n  $hooktypes" 
+	local opt
+	local -a autoopts
+	integer del list help
+	while getopts "dDhLUzk" opt
+	do
+		case $opt in
+			(d) del=1  ;;
+			(D) del=2  ;;
+			(h) help=1  ;;
+			(L) list=1  ;;
+			([Uzk]) autoopts+=(-$opt)  ;;
+			(*) return 1 ;;
+		esac
+	done
+	shift $(( OPTIND - 1 ))
+	if (( list ))
+	then
+		typeset -mp "(${1:-${(@j:|:)hooktypes}})_functions"
+		return $?
+	elif (( help || $# != 2 || ${hooktypes[(I)$1]} == 0 ))
+	then
+		print -u$(( 2 - help )) $usage
+		return $(( 1 - help ))
+	fi
+	local hook="${1}_functions" 
+	local fn="$2" 
+	if (( del ))
+	then
+		if (( ${(P)+hook} ))
+		then
+			if (( del == 2 ))
+			then
+				set -A $hook ${(P)hook:#${~fn}}
+			else
+				set -A $hook ${(P)hook:#$fn}
+			fi
+			if (( ! ${(P)#hook} ))
+			then
+				unset $hook
+			fi
+		fi
+	else
+		if (( ${(P)+hook} ))
+		then
+			if (( ${${(P)hook}[(I)$fn]} == 0 ))
+			then
+				typeset -ga $hook
+				set -A $hook ${(P)hook} $fn
+			fi
+		else
+			typeset -ga $hook
+			set -A $hook $fn
+		fi
+		autoload $autoopts -- $fn
+	fi
+}
+compaudit () {
+	# undefined
+	builtin autoload -XUz /usr/share/zsh/functions/Completion
+}
+compdef () {
+	local opt autol type func delete eval new i ret=0 cmd svc 
+	local -a match mbegin mend
+	emulate -L zsh
+	setopt extendedglob
+	if (( ! $# ))
+	then
+		print -u2 "$0: I need arguments"
+		return 1
+	fi
+	while getopts "anpPkKde" opt
+	do
+		case "$opt" in
+			(a) autol=yes  ;;
+			(n) new=yes  ;;
+			([pPkK]) if [[ -n "$type" ]]
+				then
+					print -u2 "$0: type already set to $type"
+					return 1
+				fi
+				if [[ "$opt" = p ]]
+				then
+					type=pattern 
+				elif [[ "$opt" = P ]]
+				then
+					type=postpattern 
+				elif [[ "$opt" = K ]]
+				then
+					type=widgetkey 
+				else
+					type=key 
+				fi ;;
+			(d) delete=yes  ;;
+			(e) eval=yes  ;;
+		esac
+	done
+	shift OPTIND-1
+	if (( ! $# ))
+	then
+		print -u2 "$0: I need arguments"
+		return 1
+	fi
+	if [[ -z "$delete" ]]
+	then
+		if [[ -z "$eval" ]] && [[ "$1" = *\=* ]]
+		then
+			while (( $# ))
+			do
+				if [[ "$1" = *\=* ]]
+				then
+					cmd="${1%%\=*}" 
+					svc="${1#*\=}" 
+					func="$_comps[${_services[(r)$svc]:-$svc}]" 
+					[[ -n ${_services[$svc]} ]] && svc=${_services[$svc]} 
+					[[ -z "$func" ]] && func="${${_patcomps[(K)$svc][1]}:-${_postpatcomps[(K)$svc][1]}}" 
+					if [[ -n "$func" ]]
+					then
+						_comps[$cmd]="$func" 
+						_services[$cmd]="$svc" 
+					else
+						print -u2 "$0: unknown command or service: $svc"
+						ret=1 
+					fi
+				else
+					print -u2 "$0: invalid argument: $1"
+					ret=1 
+				fi
+				shift
+			done
+			return ret
+		fi
+		func="$1" 
+		[[ -n "$autol" ]] && autoload -rUz "$func"
+		shift
+		case "$type" in
+			(widgetkey) while [[ -n $1 ]]
+				do
+					if [[ $# -lt 3 ]]
+					then
+						print -u2 "$0: compdef -K requires <widget> <comp-widget> <key>"
+						return 1
+					fi
+					[[ $1 = _* ]] || 1="_$1" 
+					[[ $2 = .* ]] || 2=".$2" 
+					[[ $2 = .menu-select ]] && zmodload -i zsh/complist
+					zle -C "$1" "$2" "$func"
+					if [[ -n $new ]]
+					then
+						bindkey "$3" | IFS=$' \t' read -A opt
+						[[ $opt[-1] = undefined-key ]] && bindkey "$3" "$1"
+					else
+						bindkey "$3" "$1"
+					fi
+					shift 3
+				done ;;
+			(key) if [[ $# -lt 2 ]]
+				then
+					print -u2 "$0: missing keys"
+					return 1
+				fi
+				if [[ $1 = .* ]]
+				then
+					[[ $1 = .menu-select ]] && zmodload -i zsh/complist
+					zle -C "$func" "$1" "$func"
+				else
+					[[ $1 = menu-select ]] && zmodload -i zsh/complist
+					zle -C "$func" ".$1" "$func"
+				fi
+				shift
+				for i
+				do
+					if [[ -n $new ]]
+					then
+						bindkey "$i" | IFS=$' \t' read -A opt
+						[[ $opt[-1] = undefined-key ]] || continue
+					fi
+					bindkey "$i" "$func"
+				done ;;
+			(*) while (( $# ))
+				do
+					if [[ "$1" = -N ]]
+					then
+						type=normal 
+					elif [[ "$1" = -p ]]
+					then
+						type=pattern 
+					elif [[ "$1" = -P ]]
+					then
+						type=postpattern 
+					else
+						case "$type" in
+							(pattern) if [[ $1 = (#b)(*)=(*) ]]
+								then
+									_patcomps[$match[1]]="=$match[2]=$func" 
+								else
+									_patcomps[$1]="$func" 
+								fi ;;
+							(postpattern) if [[ $1 = (#b)(*)=(*) ]]
+								then
+									_postpatcomps[$match[1]]="=$match[2]=$func" 
+								else
+									_postpatcomps[$1]="$func" 
+								fi ;;
+							(*) if [[ "$1" = *\=* ]]
+								then
+									cmd="${1%%\=*}" 
+									svc=yes 
+								else
+									cmd="$1" 
+									svc= 
+								fi
+								if [[ -z "$new" || -z "${_comps[$1]}" ]]
+								then
+									_comps[$cmd]="$func" 
+									[[ -n "$svc" ]] && _services[$cmd]="${1#*\=}" 
+								fi ;;
+						esac
+					fi
+					shift
+				done ;;
+		esac
+	else
+		case "$type" in
+			(pattern) unset "_patcomps[$^@]" ;;
+			(postpattern) unset "_postpatcomps[$^@]" ;;
+			(key) print -u2 "$0: cannot restore key bindings"
+				return 1 ;;
+			(*) unset "_comps[$^@]" ;;
+		esac
+	fi
+}
+compdump () {
+	# undefined
+	builtin autoload -XUz /usr/share/zsh/functions/Completion
+}
+compinit () {
+	# undefined
+	builtin autoload -XUz /usr/share/zsh/functions/Completion
+}
+compinstall () {
+	# undefined
+	builtin autoload -XUz /usr/share/zsh/functions/Completion
+}
+fzf () {
+	case "$1" in
+		("cat") shift
+			command fzf --preview "cat {}" "$@" ;;
+		(*) command fzf "$@" ;;
+	esac
+}
+'fzf cat' () {
+	fzf --preview "cat {}"
+}
+fzf-cd-widget () {
+	local cmd="${FZF_ALT_C_COMMAND:-"command find -L . -mindepth 1 \\( -path '*/.*' -o -fstype 'sysfs' -o -fstype 'devfs' -o -fstype 'devtmpfs' -o -fstype 'proc' \\) -prune     -o -type d -print 2> /dev/null | cut -b3-"}" 
+	setopt localoptions pipefail no_aliases 2> /dev/null
+	local dir="$(eval "$cmd" | FZF_DEFAULT_OPTS="--height ${FZF_TMUX_HEIGHT:-40%} --reverse --scheme=path --bind=ctrl-z:ignore ${FZF_DEFAULT_OPTS-} ${FZF_ALT_C_OPTS-}" $(__fzfcmd) +m)" 
+	if [[ -z "$dir" ]]
+	then
+		zle redisplay
+		return 0
+	fi
+	zle push-line
+	BUFFER="builtin cd -- ${(q)dir}" 
+	zle accept-line
+	local ret=$? 
+	unset dir
+	zle reset-prompt
+	return $ret
+}
+fzf-completion () {
+	local tokens cmd prefix trigger tail matches lbuf d_cmds
+	setopt localoptions noshwordsplit noksh_arrays noposixbuiltins
+	tokens=(${(z)LBUFFER}) 
+	if [ ${#tokens} -lt 1 ]
+	then
+		zle ${fzf_default_completion:-expand-or-complete}
+		return
+	fi
+	cmd=$(__fzf_extract_command "$LBUFFER") 
+	trigger=${FZF_COMPLETION_TRIGGER-'**'} 
+	[ -z "$trigger" -a ${LBUFFER[-1]} = ' ' ] && tokens+=("") 
+	if [[ ${LBUFFER} = *"${tokens[-2]-}${tokens[-1]}" ]]
+	then
+		tokens[-2]="${tokens[-2]-}${tokens[-1]}" 
+		tokens=(${tokens[0,-2]}) 
+	fi
+	lbuf=$LBUFFER 
+	tail=${LBUFFER:$(( ${#LBUFFER} - ${#trigger} ))} 
+	if [ ${#tokens} -gt 1 -a "$tail" = "$trigger" ]
+	then
+		d_cmds=(${=FZF_COMPLETION_DIR_COMMANDS:-cd pushd rmdir}) 
+		[ -z "$trigger" ] && prefix=${tokens[-1]}  || prefix=${tokens[-1]:0:-${#trigger}} 
+		if [[ $prefix = *'$('* ]] || [[ $prefix = *'<('* ]] || [[ $prefix = *'>('* ]] || [[ $prefix = *':='* ]] || [[ $prefix = *'`'* ]]
+		then
+			return
+		fi
+		[ -n "${tokens[-1]}" ] && lbuf=${lbuf:0:-${#tokens[-1]}} 
+		if eval "type _fzf_complete_${cmd} > /dev/null"
+		then
+			prefix="$prefix" eval _fzf_complete_${cmd} ${(q)lbuf}
+			zle reset-prompt
+		elif [ ${d_cmds[(i)$cmd]} -le ${#d_cmds} ]
+		then
+			_fzf_dir_completion "$prefix" "$lbuf"
+		else
+			_fzf_path_completion "$prefix" "$lbuf"
+		fi
+	else
+		zle ${fzf_default_completion:-expand-or-complete}
+	fi
+}
+fzf-file-widget () {
+	LBUFFER="${LBUFFER}$(__fsel)" 
+	local ret=$? 
+	zle reset-prompt
+	return $ret
+}
+fzf-history-widget () {
+	local selected num
+	setopt localoptions noglobsubst noposixbuiltins pipefail no_aliases 2> /dev/null
+	selected=($(fc -rl 1 | awk '{ cmd=$0; sub(/^[ \t]*[0-9]+\**[ \t]+/, "", cmd); if (!seen[cmd]++) print $0 }' |
+    FZF_DEFAULT_OPTS="--height ${FZF_TMUX_HEIGHT:-40%} ${FZF_DEFAULT_OPTS-} -n2..,.. --scheme=history --bind=ctrl-r:toggle-sort,ctrl-z:ignore ${FZF_CTRL_R_OPTS-} --query=${(qqq)LBUFFER} +m" $(__fzfcmd))) 
+	local ret=$? 
+	if [ -n "$selected" ]
+	then
+		num=$selected[1] 
+		if [ -n "$num" ]
+		then
+			zle vi-fetch-history -n $num
+		fi
+	fi
+	zle reset-prompt
+	return $ret
+}
+prompt_starship_precmd () {
+	STARSHIP_CMD_STATUS=$? STARSHIP_PIPE_STATUS=(${pipestatus[@]}) 
+	if (( ${+STARSHIP_START_TIME} ))
+	then
+		__starship_get_time && STARSHIP_DURATION=$(( STARSHIP_CAPTURED_TIME - STARSHIP_START_TIME )) 
+		unset STARSHIP_START_TIME
+	else
+		unset STARSHIP_DURATION STARSHIP_CMD_STATUS STARSHIP_PIPE_STATUS
+	fi
+	STARSHIP_JOBS_COUNT="${#jobstates[*]}" 
+}
+prompt_starship_preexec () {
+	__starship_get_time && STARSHIP_START_TIME=$STARSHIP_CAPTURED_TIME 
+}
+run-help () {
+	# undefined
+	builtin autoload -XUz
+}
+starship_zle-keymap-select () {
+	zle reset-prompt
+}
+starship_zle-keymap-select-wrapped () {
+	$__starship_preserved_zle_keymap_select "$@"
+	starship_zle-keymap-select "$@"
+}
+windows () {
+	case "$1" in
+		("" | "home") cd "/mnt/c/Users/haris" ;;
+		("desktop") cd "/mnt/c/Users/haris/Desktop" ;;
+		("projects") cd "/mnt/c/Users/haris/Projects" ;;
+		(*) echo "Shortcut '$1' not found." ;;
+	esac
+}
+zle-line-finish () {
+	emulate -L zsh
+	printf '%s' ${terminfo[rmkx]}
+}
+zle-line-init () {
+	emulate -L zsh
+	printf '%s' ${terminfo[smkx]}
+}
