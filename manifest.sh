@@ -9,6 +9,15 @@ save() {
 	done | sort > $HOME/manifest/apt-manifest.txt
 }
 
+install() {
+	echo "Installing packages from manifest..."
+	if [ ! -f $HOME/manifest/apt-manifest.txt ]; then
+		echo "Manifest file not found. Please run 'manifest save' first."
+		exit 1
+	fi
+	xargs -a $HOME/manifest/apt-manifest.txt sudo apt-get install -y
+}
+
 case "$1" in
     save)
 		save
@@ -16,14 +25,13 @@ case "$1" in
     install)
         echo "Installing packages..."
         ;;
-    diff)
-        echo "Comparing..."
-        ;;
     help)
-        echo "Usage: manifest {save|install|diff}"
+        echo "Usage: manifest {save|install}"
         ;;
     *)
         echo "Unknown command: $1"
         exit 1
         ;;
 esac
+
+
