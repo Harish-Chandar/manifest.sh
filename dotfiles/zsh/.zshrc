@@ -1,3 +1,5 @@
+export EDITOR='nvim'
+
 # Load your recovered PATH
 export PATH="$(cat ~/recovered_path.txt)"
 export PATH="$HOME/.local/bin:$PATH"
