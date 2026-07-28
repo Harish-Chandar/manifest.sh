@@ -1,4 +1,3 @@
-apt-transport-https
 build-essential
 ca-certificates
 clang
@@ -12,7 +11,6 @@ gcc
 git
 gnupg
 graphviz
-init
 jupyter
 jupyter-core
 libattr1
@@ -23,7 +21,6 @@ libssl-dev
 make
 mysql-apt-config
 nodejs
-pkg-config
 python3
 python3-pip
 python3.9
@@ -32,8 +29,6 @@ ripgrep
 rustup
 stow
 telnet-ssl
-ubuntu-minimal
-ubuntu-wsl
 unzip
 zip
 zoxide
