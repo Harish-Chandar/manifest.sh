@@ -1,12 +1,17 @@
 #!/bin/bash
 
 save() {
-	echo "Saving manifest..."
-	apt-mark showmanual | while read -r pkg; do
-		if ! apt-cache show "$pkg" | grep -q '^Essential: yes'; then
-			echo "$pkg"
-		fi
-	done | sort > $HOME/manifest/apt-manifest.txt
+    echo "Saving manifest..."
+
+    apt-mark showmanual | while read -r pkg; do
+        info=$(apt-cache show "$pkg")
+
+        grep -q '^Essential: yes' <<< "$info" && continue
+        grep -q '^Section: metapackages' <<< "$info" && continue
+        grep -qi 'transitional package' <<< "$info" && continue
+
+        echo "$pkg"
+    done | sort > "$HOME/manifest/apt-manifest.txt"
 }
 
 install() {
