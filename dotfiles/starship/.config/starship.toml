@@ -1,9 +1,19 @@
 # ~/.config/starship.toml
 
-add_newline = true
+add_newline = true 
 
-[package]
-disabled = true
+format = """
+$directory\
+$git_branch\
+$git_status\
+$line_break\
+$character"""
+
+# prompt_order = [
+#   "character",
+#   "directory",
+#   "git_branch"
+# ]
 
 [character]
 success_symbol = "[❯](bold green)"
@@ -18,3 +28,7 @@ symbol = "[ ](bold magenta)"
 
 [cmd_duration]
 disabled = true
+
+[package]
+disabled = true
+
