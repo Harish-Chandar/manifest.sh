@@ -3,6 +3,7 @@
 add_newline = true 
 
 format = """
+[ ](#ff8700)\
 $directory\
 $git_branch\
 $git_status\

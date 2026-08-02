@@ -19,6 +19,7 @@ libreadline-dev
 libsqlite3-dev
 libssl-dev
 make
+mingw-w64
 mysql-apt-config
 nodejs
 python3
